@@ -1,0 +1,280 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { format } from 'date-fns';
+import {
+  ArrowUpRight,
+  Bell,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Plus,
+  Search,
+  Shield,
+  Ticket,
+  TriangleAlert,
+  Wrench,
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Card, Button, Badge } from '../components/ui/Primitives';
+import { MOCK_BOOKINGS, MOCK_RESOURCES, MOCK_TICKETS } from '../mockData';
+import { cn } from '../lib/utils';
+
+export const Dashboard = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+  const firstName = user?.name.split(' ')[0] ?? 'Operator';
+
+  const approvedBookings = MOCK_BOOKINGS.filter((booking) => booking.status === 'APPROVED').length;
+  const openTickets = MOCK_TICKETS.filter((ticket) => ticket.status !== 'CLOSED').length;
+  const activeResources = MOCK_RESOURCES.filter((resource) => resource.status === 'ACTIVE').length;
+
+  return (
+    <div className="space-y-8">
+      <section className="surface-strong overflow-hidden p-6 md:p-8">
+        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+          <div>
+            <div className="eyebrow mb-5">Daily command briefing</div>
+            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">Welcome back, {firstName}. Campus operations are steady, with a few queues asking for attention.</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+              The dashboard is now structured like a real campus operations board: immediate actions on top, live queue visibility in the middle, and role-sensitive oversight on the side.
+            </p>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link to="/catalogue">
+                <Button className="gap-2">
+                  <Plus size={18} />
+                  New booking
+                </Button>
+              </Link>
+              <Link to="/tickets/new">
+                <Button variant="outline" className="gap-2">
+                  <Wrench size={18} />
+                  Report issue
+                </Button>
+              </Link>
+              <Link to="/notifications">
+                <Button variant="ghost" className="gap-2">
+                  <Bell size={18} />
+                  Review signals
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-border bg-slate-950 p-5 text-white shadow-[0_22px_60px_rgba(2,8,23,0.35)]">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Live status</p>
+                <h3 className="mt-2 text-xl font-semibold">Operational summary</h3>
+              </div>
+              <Badge variant="success">Healthy</Badge>
+            </div>
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              <SignalPanel label="Active bookings" value={`${approvedBookings}`} accent="text-emerald-300" />
+              <SignalPanel label="Open incidents" value={`${openTickets}`} accent="text-amber-300" />
+              <SignalPanel label="Assets online" value={`${activeResources}/${MOCK_RESOURCES.length}`} accent="text-cyan-300" />
+              <SignalPanel label="Unread alerts" value="01" accent="text-violet-300" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Bookings approved"
+          value={`${approvedBookings}`}
+          trend="2 approvals since yesterday"
+          icon={<Calendar className="text-primary" />}
+        />
+        <StatCard
+          label="Open tickets"
+          value={`${openTickets}`}
+          trend="1 item needs urgent follow-up"
+          icon={<Ticket className="text-warning" />}
+        />
+        <StatCard
+          label="Signals unread"
+          value="1"
+          trend="Booking approval arrived this morning"
+          icon={<Bell className="text-secondary-accent" />}
+        />
+        <StatCard
+          label="Assets active"
+          value={`${activeResources}`}
+          trend="95% service availability"
+          icon={<CheckCircle2 className="text-success" />}
+        />
+      </section>
+
+      <div className="grid gap-8 xl:grid-cols-[1.1fr_1.1fr_0.8fr]">
+        <section className="space-y-4">
+          <SectionHeader title="Upcoming bookings" to="/bookings/my" />
+          <div className="space-y-3">
+            {MOCK_BOOKINGS.map((booking) => {
+              const resource = MOCK_RESOURCES.find((item) => item.id === booking.resourceId);
+              return (
+                <Card key={booking.id} className="group bg-white/70 p-5 dark:bg-white/5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex gap-4">
+                      <div className="h-14 w-14 overflow-hidden rounded-2xl bg-muted">
+                        <img src={resource?.imageUrl} alt={resource?.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-semibold">{resource?.name}</h3>
+                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Calendar size={12} />
+                            {format(new Date(booking.date), 'MMM d, yyyy')}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock size={12} />
+                            {booking.startTime} - {booking.endTime}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin size={12} />
+                            {resource?.location}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">{booking.purpose}</p>
+                      </div>
+                    </div>
+                    <Badge variant={booking.status === 'APPROVED' ? 'success' : 'warning'}>{booking.status}</Badge>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <SectionHeader title="Incident queue" to="/tickets/my" />
+          <div className="space-y-3">
+            {MOCK_TICKETS.map((ticket) => {
+              const resource = MOCK_RESOURCES.find((item) => item.id === ticket.resourceId);
+              return (
+                <Card key={ticket.id} className="bg-white/70 p-5 dark:bg-white/5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={ticket.priority === 'HIGH' ? 'danger' : 'warning'}>{ticket.priority} priority</Badge>
+                        <Badge variant="info">{ticket.status.replace('_', ' ')}</Badge>
+                      </div>
+                      <p className="mt-4 text-base font-semibold">{ticket.description}</p>
+                      <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <MapPin size={12} />
+                          {resource?.location}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock size={12} />
+                          Reported {format(new Date(ticket.createdAt), 'MMM d')}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-danger/10 p-3 text-danger">
+                      <TriangleAlert size={18} />
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="premium-card overflow-hidden bg-slate-950 p-5 text-white">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Quick actions</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <QuickAction icon={<Search size={18} />} label="Find lab" to="/catalogue" />
+              <QuickAction icon={<Calendar size={18} />} label="Book room" to="/catalogue" />
+              <QuickAction icon={<Ticket size={18} />} label="Open ticket" to="/tickets/new" />
+              <QuickAction icon={<Bell size={18} />} label="Signals" to="/notifications" />
+            </div>
+          </div>
+
+          <Card className="space-y-4 bg-white/70 p-5 dark:bg-white/5">
+            <p className="text-sm font-semibold">System readiness</p>
+            <StatusItem label="Network" status="Operational" type="success" />
+            <StatusItem label="Facilities" status="98% active" type="success" />
+            <StatusItem label="Maintenance queue" status="3 pending" type="warning" />
+            <StatusItem label="AV equipment" status="1 degraded" type="danger" />
+          </Card>
+
+          {isAdmin && (
+            <Card className="bg-primary/10 p-5">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-primary/15 p-3 text-primary">
+                  <Shield size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Admin oversight</p>
+                  <p className="text-xs text-muted-foreground">Bookings waiting for a decision</p>
+                </div>
+              </div>
+              <p className="mt-5 text-4xl font-semibold">12</p>
+              <p className="mt-2 text-sm text-muted-foreground">Use the booking desk to resolve pending demand before the next peak slot.</p>
+              <Link to="/admin/bookings" className="mt-5 block">
+                <Button size="sm" className="w-full">Open admin panel</Button>
+              </Link>
+            </Card>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+};
+
+const StatCard = ({
+  label,
+  value,
+  trend,
+  icon,
+}) => (
+  <Card className="bg-white/70 p-5 dark:bg-white/5">
+    <div className="flex items-start justify-between">
+      <div className="rounded-2xl bg-muted/80 p-3">{React.cloneElement(icon, { size: 20 })}</div>
+      <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
+    </div>
+    <p className="mt-6 text-4xl font-semibold tracking-tight">{value}</p>
+    <p className="mt-2 text-sm text-muted-foreground">{trend}</p>
+  </Card>
+);
+
+const SectionHeader = ({ title, to }) => (
+  <div className="flex items-center justify-between">
+    <h3 className="text-xl font-semibold">{title}</h3>
+    <Link to={to} className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
+      View all
+      <ArrowUpRight size={14} />
+    </Link>
+  </div>
+);
+
+const SignalPanel = ({ label, value, accent }) => (
+  <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+    <p className="text-sm text-slate-400">{label}</p>
+    <p className={cn('mt-3 text-3xl font-semibold', accent)}>{value}</p>
+  </div>
+);
+
+const QuickAction = ({ icon, label, to }) => (
+  <Link to={to} className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center transition-colors hover:bg-white/10">
+    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-cyan-300">{icon}</div>
+    <p className="mt-3 text-sm font-semibold text-white">{label}</p>
+  </Link>
+);
+
+const StatusItem = ({
+  label,
+  status,
+  type,
+}) => (
+  <div className="flex items-center justify-between rounded-2xl border border-border bg-white/35 px-4 py-3 dark:bg-white/5">
+    <span className="text-sm font-medium">{label}</span>
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground">{status}</span>
+      <div className={cn('h-2.5 w-2.5 rounded-full', type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-danger')} />
+    </div>
+  </div>
+);

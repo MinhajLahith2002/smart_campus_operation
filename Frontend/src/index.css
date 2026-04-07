@@ -1,0 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-primary: #0f766e;
+  --color-primary-foreground: #ffffff;
+  --color-secondary-accent: #2563eb;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-signal: #8b5cf6;
+
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+}
+
+@layer base {
+  :root {
+    --background: #f3f7f6;
+    --foreground: #0f172a;
+    --card: rgba(255, 255, 255, 0.88);
+    --card-foreground: #0f172a;
+    --border: rgba(15, 23, 42, 0.08);
+    --muted: #e8efee;
+    --muted-foreground: #52606d;
+    --panel: rgba(255, 255, 255, 0.72);
+    --panel-strong: rgba(255, 255, 255, 0.92);
+    --hero-grid: rgba(15, 118, 110, 0.11);
+  }
+
+  .dark {
+    --background: #07111d;
+    --foreground: #ecfeff;
+    --card: rgba(8, 19, 34, 0.84);
+    --card-foreground: #ecfeff;
+    --border: rgba(148, 163, 184, 0.14);
+    --muted: rgba(15, 23, 42, 0.8);
+    --muted-foreground: #9fb2c7;
+    --panel: rgba(5, 14, 26, 0.72);
+    --panel-strong: rgba(7, 17, 29, 0.92);
+    --hero-grid: rgba(37, 99, 235, 0.16);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)] font-sans antialiased transition-colors duration-200;
+    background-image:
+      radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 28%),
+      radial-gradient(circle at top right, rgba(15, 118, 110, 0.14), transparent 32%),
+      linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.04));
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--hero-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: radial-gradient(circle at center, black 35%, transparent 85%);
+    opacity: 0.42;
+    z-index: -1;
+  }
+
+  ::selection {
+    background: rgba(37, 99, 235, 0.2);
+  }
+}
+
+@layer components {
+  .premium-card {
+    @apply border border-[var(--border)] rounded-2xl transition-all duration-300;
+    background: var(--card);
+    box-shadow:
+      0 18px 40px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+
+  .glass-panel {
+    @apply backdrop-blur-xl border rounded-2xl;
+    background: var(--panel);
+    border-color: var(--border);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  }
+
+  .surface-strong {
+    @apply backdrop-blur-xl border rounded-3xl;
+    background: var(--panel-strong);
+    border-color: var(--border);
+    box-shadow:
+      0 24px 60px rgba(15, 23, 42, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  }
+
+  .section-title {
+    @apply text-2xl md:text-3xl font-semibold tracking-tight;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em];
+    background: rgba(37, 99, 235, 0.12);
+    color: var(--color-secondary-accent);
+  }
+
+  .metric-glow {
+    box-shadow: 0 0 0 1px rgba(15, 118, 110, 0.08), 0 16px 40px rgba(15, 118, 110, 0.16);
+  }
+}
