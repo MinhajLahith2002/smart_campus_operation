@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { getRoleCredentials } from '../lib/authDefaults';
 
 const AuthContext = createContext(undefined);
 
@@ -13,24 +14,16 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = (role, details = {}) => {
-    const displayName =
-      details.name ||
-      (details.email
-        ? details.email
-            .split('@')[0]
-            .split(/[._-]/)
-            .filter(Boolean)
-            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-            .join(' ')
-        : null);
-
+    const defaults = getRoleCredentials(role);
     const mockUser = {
-      id: role === 'ADMIN' ? 'admin-1' : role === 'TECHNICIAN' ? 'tech-1' : 'user-1',
-      name: displayName || (role === 'ADMIN' ? 'Admin User' : role === 'TECHNICIAN' ? 'Tech Specialist' : 'Campus Student'),
-      email: details.email || (role === 'ADMIN' ? 'admin@campus.edu' : role === 'TECHNICIAN' ? 'tech@campus.edu' : 'student@campus.edu'),
+      id: details.id || defaults.id,
+      name: details.name || defaults.name,
+      email: details.email || defaults.email,
+      campusId: details.campusId || defaults.campusId,
       role,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`,
     };
+
     setUser(mockUser);
     localStorage.setItem('hub_user', JSON.stringify(mockUser));
   };
