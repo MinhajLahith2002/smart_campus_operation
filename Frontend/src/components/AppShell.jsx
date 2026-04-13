@@ -14,6 +14,7 @@ import {
   Ticket,
   Radar,
   Activity,
+  Wrench,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
@@ -57,9 +58,9 @@ const SidebarItem = ({ item, collapsed, active }) => {
   );
 };
 
-const routeTitle = (pathname, items) => {
-  return items.find((item) => item.to === pathname)?.label ?? 'Operations';
-};
+const isActivePath = (pathname, itemPath) => pathname === itemPath || pathname.startsWith(`${itemPath}/`);
+
+const routeTitle = (pathname, items) => items.find((item) => isActivePath(pathname, item.to))?.label ?? 'Operations';
 
 export const AppShell = ({ children }) => {
   const { user, logout } = useAuth();
@@ -67,21 +68,28 @@ export const AppShell = ({ children }) => {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
+  const ticketItem = user?.role === 'ADMIN'
+    ? { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Triage and assignment' }
+    : user?.role === 'TECHNICIAN'
+      ? { to: '/tickets/assigned', icon: Wrench, label: 'Assigned Work', hint: 'Technician queue' }
+      : { to: '/tickets/my', icon: Ticket, label: 'My Tickets', hint: 'Report and track repairs' };
+
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Overview', hint: 'Campus pulse' },
     { to: '/catalogue', icon: Search, label: 'Catalogue', hint: 'Find spaces and assets' },
     { to: '/bookings/my', icon: CalendarRange, label: 'Bookings', hint: 'Reservations and approvals' },
-    { to: '/tickets/my', icon: Ticket, label: 'Tickets', hint: 'Repairs and incidents' },
+    ticketItem,
     { to: '/notifications', icon: Bell, label: 'Signals', hint: 'Alerts and activity' },
   ];
 
-  const adminItems = [
-    { to: '/admin/bookings', icon: ShieldCheck, label: 'Booking Desk', hint: 'Operational queue' },
-    { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Technician coordination' },
-  ];
+  const adminItems = user?.role === 'ADMIN'
+    ? [
+        { to: '/admin/bookings', icon: ShieldCheck, label: 'Booking Desk', hint: 'Operational queue' },
+        { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Assign and triage' },
+      ]
+    : [];
 
   const allItems = [...navItems, ...adminItems, { to: '/settings', icon: Settings, label: 'Settings', hint: 'Preferences and theme' }];
-  const visibleAdmin = user?.role === 'ADMIN' || user?.role === 'TECHNICIAN';
 
   return (
     <div className="min-h-screen md:flex">
@@ -101,7 +109,7 @@ export const AppShell = ({ children }) => {
                     Operations grid
                   </div>
                   <p className="text-xl font-semibold tracking-tight">Smart Campus Hub</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Live coordination for bookings, maintenance, and service health.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Module C now adapts to reporter, admin, and technician responsibility.</p>
                 </div>
               )}
               <Button variant="ghost" size="icon" onClick={() => setCollapsed((value) => !value)} className="shrink-0">
@@ -114,8 +122,8 @@ export const AppShell = ({ children }) => {
                   <Activity size={18} />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">All core services online</p>
-                  <p className="text-xs text-slate-300">Monitoring booking, asset, and incident channels</p>
+                  <p className="text-sm font-semibold">Role-aware workspace online</p>
+                  <p className="text-xs text-slate-300">{user?.role === 'ADMIN' ? 'Triage controls enabled' : user?.role === 'TECHNICIAN' ? 'Assigned work queue active' : 'Reporter ticket tracking active'}</p>
                 </div>
               </div>
             )}
@@ -126,15 +134,15 @@ export const AppShell = ({ children }) => {
           <div className="space-y-2">
             {!collapsed && <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">Mission Control</p>}
             {navItems.map((item) => (
-              <SidebarItem key={item.to} item={item} collapsed={collapsed} active={location.pathname === item.to} />
+              <SidebarItem key={item.to} item={item} collapsed={collapsed} active={isActivePath(location.pathname, item.to)} />
             ))}
           </div>
 
-          {visibleAdmin && (
+          {!!adminItems.length && (
             <div className="mt-8 space-y-2">
               {!collapsed && <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">Operations Desk</p>}
               {adminItems.map((item) => (
-                <SidebarItem key={item.to} item={item} collapsed={collapsed} active={location.pathname === item.to} />
+                <SidebarItem key={item.to} item={item} collapsed={collapsed} active={isActivePath(location.pathname, item.to)} />
               ))}
             </div>
           )}
@@ -142,7 +150,7 @@ export const AppShell = ({ children }) => {
 
         <div className="border-t border-border p-4">
           <div className="space-y-2">
-            <SidebarItem item={allItems[allItems.length - 1]} collapsed={collapsed} active={location.pathname === '/settings'} />
+            <SidebarItem item={allItems[allItems.length - 1]} collapsed={collapsed} active={isActivePath(location.pathname, '/settings')} />
             <button
               onClick={logout}
               className={cn(
@@ -192,13 +200,13 @@ export const AppShell = ({ children }) => {
 
               <div className="space-y-2">
                 {navItems.map((item) => (
-                  <SidebarItem key={item.to} item={item} collapsed={false} active={location.pathname === item.to} />
+                  <SidebarItem key={item.to} item={item} collapsed={false} active={isActivePath(location.pathname, item.to)} />
                 ))}
-                {visibleAdmin && (
+                {!!adminItems.length && (
                   <>
                     <p className="px-2 pt-4 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">Operations Desk</p>
                     {adminItems.map((item) => (
-                      <SidebarItem key={item.to} item={item} collapsed={false} active={location.pathname === item.to} />
+                      <SidebarItem key={item.to} item={item} collapsed={false} active={isActivePath(location.pathname, item.to)} />
                     ))}
                   </>
                 )}
@@ -227,7 +235,7 @@ export const AppShell = ({ children }) => {
                   <span className="h-2 w-2 rounded-full bg-success" />
                   Live
                 </div>
-                <p className="mt-1 text-sm font-medium text-foreground">Critical systems stable</p>
+                <p className="mt-1 text-sm font-medium text-foreground">Module C role boundaries active</p>
               </div>
 
               <div className="glass-panel flex items-center gap-3 px-3 py-2">

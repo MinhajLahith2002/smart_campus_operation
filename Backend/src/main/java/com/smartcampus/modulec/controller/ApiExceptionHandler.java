@@ -33,4 +33,20 @@ public class ApiExceptionHandler {
                 "message", "Validation failed",
                 "errors", fieldErrors));
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "timestamp", OffsetDateTime.now(),
+                "status", HttpStatus.BAD_REQUEST.value(),
+                "message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<?> handleForbidden(SecurityException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "timestamp", OffsetDateTime.now(),
+                "status", HttpStatus.FORBIDDEN.value(),
+                "message", exception.getMessage()));
+    }
 }

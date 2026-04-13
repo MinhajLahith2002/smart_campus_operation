@@ -30,6 +30,7 @@ public record TicketResponse(
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
         List<String> evidenceLabels,
-        List<TicketActivityResponse> activities
+        List<TicketActivityResponse> activities,
+        List<TicketCommentResponse> comments
 ) {
 }

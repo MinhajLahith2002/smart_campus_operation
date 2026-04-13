@@ -96,6 +96,10 @@ public class Ticket {
     @OrderBy("id ASC")
     private List<TicketEvidence> evidenceItems = new ArrayList<>();
 
+    @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("createdAt ASC")
+    private List<TicketComment> comments = new ArrayList<>();
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getTitle() { return title; }
@@ -142,4 +146,6 @@ public class Ticket {
     public void setActivities(List<TicketActivity> activities) { this.activities = activities; }
     public List<TicketEvidence> getEvidenceItems() { return evidenceItems; }
     public void setEvidenceItems(List<TicketEvidence> evidenceItems) { this.evidenceItems = evidenceItems; }
+    public List<TicketComment> getComments() { return comments; }
+    public void setComments(List<TicketComment> comments) { this.comments = comments; }
 }

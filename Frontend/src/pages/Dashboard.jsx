@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
@@ -18,16 +18,55 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Card, Button, Badge } from '../components/ui/Primitives';
 import { MOCK_BOOKINGS, MOCK_RESOURCES, MOCK_TICKETS } from '../mockData';
+import { getTicketSummary, getTickets } from '../lib/moduleCApi';
 import { cn } from '../lib/utils';
 
 export const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const isTechnician = user?.role === 'TECHNICIAN';
   const firstName = user?.name.split(' ')[0] ?? 'Operator';
+  const [incidentSummary, setIncidentSummary] = useState(null);
+  const [incidentTickets, setIncidentTickets] = useState([]);
+
+  useEffect(() => {
+    let ignore = false;
+    const loadIncidentSnapshot = async () => {
+      try {
+        const [summaryData, ticketData] = await Promise.all([
+          getTicketSummary(),
+          getTickets({ role: user?.role, userId: user?.id, assignedToMe: isTechnician }),
+        ]);
+        if (!ignore) {
+          setIncidentSummary(summaryData);
+          setIncidentTickets(ticketData.slice(0, 3));
+        }
+      } catch (_) {
+        if (!ignore) {
+          setIncidentSummary(null);
+          setIncidentTickets([]);
+        }
+      }
+    };
+    if (user) loadIncidentSnapshot();
+    return () => { ignore = true; };
+  }, [user, isTechnician]);
 
   const approvedBookings = MOCK_BOOKINGS.filter((booking) => booking.status === 'APPROVED').length;
-  const openTickets = MOCK_TICKETS.filter((ticket) => ticket.status !== 'CLOSED').length;
   const activeResources = MOCK_RESOURCES.filter((resource) => resource.status === 'ACTIVE').length;
+  const openTickets = incidentSummary?.open ?? MOCK_TICKETS.filter((ticket) => ticket.status !== 'CLOSED').length;
+  const roleTicketRoute = isAdmin ? '/admin/tickets' : isTechnician ? '/tickets/assigned' : '/tickets/my';
+  const incidentQueue = incidentTickets.length ? incidentTickets : MOCK_TICKETS;
+  const heroTitle = isAdmin
+    ? `Welcome back, ${firstName}. The incident desk has decisions waiting.`
+    : isTechnician
+      ? `Welcome back, ${firstName}. Your assigned maintenance queue is ready.`
+      : `Welcome back, ${firstName}. Your campus requests and repair updates are in view.`;
+  const heroCopy = isAdmin
+    ? 'Module C gives admins the triage and assignment workspace the handover expects, including deeper queue visibility and workflow control.'
+    : isTechnician
+      ? 'Module C now exposes a technician-first route with assigned work, urgency ordering, and resolution flow rather than the admin desk.'
+      : 'Module C now keeps issue reporting, ticket tracking, and closure confirmation in the reporter-facing flow instead of sharing the admin workspace.';
 
   return (
     <div className="space-y-8">
@@ -35,30 +74,13 @@ export const Dashboard = () => {
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
           <div>
             <div className="eyebrow mb-5">Daily command briefing</div>
-            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">Welcome back, {firstName}. Campus operations are steady, with a few queues asking for attention.</h2>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-              The dashboard is now structured like a real campus operations board: immediate actions on top, live queue visibility in the middle, and role-sensitive oversight on the side.
-            </p>
+            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">{heroTitle}</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">{heroCopy}</p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link to="/catalogue">
-                <Button className="gap-2">
-                  <Plus size={18} />
-                  New booking
-                </Button>
-              </Link>
-              <Link to="/tickets/new">
-                <Button variant="outline" className="gap-2">
-                  <Wrench size={18} />
-                  Report issue
-                </Button>
-              </Link>
-              <Link to="/notifications">
-                <Button variant="ghost" className="gap-2">
-                  <Bell size={18} />
-                  Review signals
-                </Button>
-              </Link>
+              <Link to="/catalogue"><Button className="gap-2"><Plus size={18} /> New booking</Button></Link>
+              <Link to={isAdmin || isTechnician ? roleTicketRoute : '/tickets/new'}><Button variant="outline" className="gap-2"><Wrench size={18} /> {isAdmin ? 'Open incident desk' : isTechnician ? 'Open assigned queue' : 'Report issue'}</Button></Link>
+              <Link to="/notifications"><Button variant="ghost" className="gap-2"><Bell size={18} /> Review signals</Button></Link>
             </div>
           </div>
 
@@ -72,39 +94,19 @@ export const Dashboard = () => {
             </div>
             <div className="mt-6 grid grid-cols-2 gap-4">
               <SignalPanel label="Active bookings" value={`${approvedBookings}`} accent="text-emerald-300" />
-              <SignalPanel label="Open incidents" value={`${openTickets}`} accent="text-amber-300" />
+              <SignalPanel label={isTechnician ? 'Assigned incidents' : 'Open incidents'} value={`${isTechnician ? incidentQueue.length : openTickets}`} accent="text-amber-300" />
               <SignalPanel label="Assets online" value={`${activeResources}/${MOCK_RESOURCES.length}`} accent="text-cyan-300" />
-              <SignalPanel label="Unread alerts" value="01" accent="text-violet-300" />
+              <SignalPanel label="Priority alerts" value={`${incidentSummary?.highOrCritical ?? 1}`} accent="text-violet-300" />
             </div>
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Bookings approved"
-          value={`${approvedBookings}`}
-          trend="2 approvals since yesterday"
-          icon={<Calendar className="text-primary" />}
-        />
-        <StatCard
-          label="Open tickets"
-          value={`${openTickets}`}
-          trend="1 item needs urgent follow-up"
-          icon={<Ticket className="text-warning" />}
-        />
-        <StatCard
-          label="Signals unread"
-          value="1"
-          trend="Booking approval arrived this morning"
-          icon={<Bell className="text-secondary-accent" />}
-        />
-        <StatCard
-          label="Assets active"
-          value={`${activeResources}`}
-          trend="95% service availability"
-          icon={<CheckCircle2 className="text-success" />}
-        />
+        <StatCard label="Bookings approved" value={`${approvedBookings}`} trend="2 approvals since yesterday" icon={<Calendar className="text-primary" />} />
+        <StatCard label={isTechnician ? 'Assigned tickets' : 'Open tickets'} value={`${isTechnician ? incidentQueue.length : openTickets}`} trend={isAdmin ? 'Admin triage queue monitored' : isTechnician ? 'Technician work queue focused' : 'Reporter-visible progress tracking'} icon={<Ticket className="text-warning" />} />
+        <StatCard label="Signals unread" value={`${incidentSummary?.highOrCritical ?? 1}`} trend="Module C alerts kept visible" icon={<Bell className="text-secondary-accent" />} />
+        <StatCard label="Assets active" value={`${activeResources}`} trend="95% service availability" icon={<CheckCircle2 className="text-success" />} />
       </section>
 
       <div className="grid gap-8 xl:grid-cols-[1.1fr_1.1fr_0.8fr]">
@@ -123,18 +125,9 @@ export const Dashboard = () => {
                       <div>
                         <h3 className="text-base font-semibold">{resource?.name}</h3>
                         <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Calendar size={12} />
-                            {format(new Date(booking.date), 'MMM d, yyyy')}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock size={12} />
-                            {booking.startTime} - {booking.endTime}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <MapPin size={12} />
-                            {resource?.location}
-                          </span>
+                          <span className="flex items-center gap-1"><Calendar size={12} />{format(new Date(booking.date), 'MMM d, yyyy')}</span>
+                          <span className="flex items-center gap-1"><Clock size={12} />{booking.startTime} - {booking.endTime}</span>
+                          <span className="flex items-center gap-1"><MapPin size={12} />{resource?.location}</span>
                         </div>
                         <p className="mt-3 text-sm text-muted-foreground">{booking.purpose}</p>
                       </div>
@@ -148,37 +141,26 @@ export const Dashboard = () => {
         </section>
 
         <section className="space-y-4">
-          <SectionHeader title="Incident queue" to="/tickets/my" />
+          <SectionHeader title={isAdmin ? 'Incident desk' : isTechnician ? 'Assigned work' : 'My incident queue'} to={roleTicketRoute} />
           <div className="space-y-3">
-            {MOCK_TICKETS.map((ticket) => {
-              const resource = MOCK_RESOURCES.find((item) => item.id === ticket.resourceId);
-              return (
-                <Card key={ticket.id} className="bg-white/70 p-5 dark:bg-white/5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={ticket.priority === 'HIGH' ? 'danger' : 'warning'}>{ticket.priority} priority</Badge>
-                        <Badge variant="info">{ticket.status.replace('_', ' ')}</Badge>
-                      </div>
-                      <p className="mt-4 text-base font-semibold">{ticket.description}</p>
-                      <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <MapPin size={12} />
-                          {resource?.location}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock size={12} />
-                          Reported {format(new Date(ticket.createdAt), 'MMM d')}
-                        </span>
-                      </div>
+            {incidentQueue.map((ticket) => (
+              <Card key={ticket.id} className="bg-white/70 p-5 dark:bg-white/5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL' ? 'danger' : 'warning'}>{ticket.priority} priority</Badge>
+                      <Badge variant="info">{ticket.status.replace('_', ' ')}</Badge>
                     </div>
-                    <div className="rounded-2xl bg-danger/10 p-3 text-danger">
-                      <TriangleAlert size={18} />
+                    <p className="mt-4 text-base font-semibold">{ticket.title || ticket.description}</p>
+                    <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1"><MapPin size={12} />{ticket.resourceLocation || ticket.location || 'Campus asset'}</span>
+                      <span className="flex items-center gap-1"><Clock size={12} />Reported {format(new Date(ticket.createdAt), 'MMM d')}</span>
                     </div>
                   </div>
-                </Card>
-              );
-            })}
+                  <div className="rounded-2xl bg-danger/10 p-3 text-danger"><TriangleAlert size={18} /></div>
+                </div>
+              </Card>
+            ))}
           </div>
         </section>
 
@@ -188,7 +170,7 @@ export const Dashboard = () => {
             <div className="mt-5 grid grid-cols-2 gap-3">
               <QuickAction icon={<Search size={18} />} label="Find lab" to="/catalogue" />
               <QuickAction icon={<Calendar size={18} />} label="Book room" to="/catalogue" />
-              <QuickAction icon={<Ticket size={18} />} label="Open ticket" to="/tickets/new" />
+              <QuickAction icon={<Ticket size={18} />} label={isAdmin ? 'Desk' : isTechnician ? 'My work' : 'Open ticket'} to={isAdmin || isTechnician ? roleTicketRoute : '/tickets/new'} />
               <QuickAction icon={<Bell size={18} />} label="Signals" to="/notifications" />
             </div>
           </div>
@@ -197,26 +179,22 @@ export const Dashboard = () => {
             <p className="text-sm font-semibold">System readiness</p>
             <StatusItem label="Network" status="Operational" type="success" />
             <StatusItem label="Facilities" status="98% active" type="success" />
-            <StatusItem label="Maintenance queue" status="3 pending" type="warning" />
-            <StatusItem label="AV equipment" status="1 degraded" type="danger" />
+            <StatusItem label="Maintenance queue" status={`${incidentSummary?.total ?? incidentQueue.length} tracked`} type="warning" />
+            <StatusItem label="AV equipment" status={`${openTickets} open`} type="danger" />
           </Card>
 
           {isAdmin && (
             <Card className="bg-primary/10 p-5">
               <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-primary/15 p-3 text-primary">
-                  <Shield size={18} />
-                </div>
+                <div className="rounded-2xl bg-primary/15 p-3 text-primary"><Shield size={18} /></div>
                 <div>
                   <p className="text-sm font-semibold">Admin oversight</p>
-                  <p className="text-xs text-muted-foreground">Bookings waiting for a decision</p>
+                  <p className="text-xs text-muted-foreground">High-priority tickets needing assignment</p>
                 </div>
               </div>
-              <p className="mt-5 text-4xl font-semibold">12</p>
-              <p className="mt-2 text-sm text-muted-foreground">Use the booking desk to resolve pending demand before the next peak slot.</p>
-              <Link to="/admin/bookings" className="mt-5 block">
-                <Button size="sm" className="w-full">Open admin panel</Button>
-              </Link>
+              <p className="mt-5 text-4xl font-semibold">{incidentSummary?.unassigned ?? 0}</p>
+              <p className="mt-2 text-sm text-muted-foreground">Use the incident desk to assign and progress urgent maintenance work.</p>
+              <Link to="/admin/tickets" className="mt-5 block"><Button size="sm" className="w-full">Open incident desk</Button></Link>
             </Card>
           )}
         </section>
@@ -225,12 +203,7 @@ export const Dashboard = () => {
   );
 };
 
-const StatCard = ({
-  label,
-  value,
-  trend,
-  icon,
-}) => (
+const StatCard = ({ label, value, trend, icon }) => (
   <Card className="bg-white/70 p-5 dark:bg-white/5">
     <div className="flex items-start justify-between">
       <div className="rounded-2xl bg-muted/80 p-3">{React.cloneElement(icon, { size: 20 })}</div>
@@ -244,10 +217,7 @@ const StatCard = ({
 const SectionHeader = ({ title, to }) => (
   <div className="flex items-center justify-between">
     <h3 className="text-xl font-semibold">{title}</h3>
-    <Link to={to} className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
-      View all
-      <ArrowUpRight size={14} />
-    </Link>
+    <Link to={to} className="inline-flex items-center gap-1 text-sm font-semibold text-primary">View all <ArrowUpRight size={14} /></Link>
   </div>
 );
 
@@ -265,11 +235,7 @@ const QuickAction = ({ icon, label, to }) => (
   </Link>
 );
 
-const StatusItem = ({
-  label,
-  status,
-  type,
-}) => (
+const StatusItem = ({ label, status, type }) => (
   <div className="flex items-center justify-between rounded-2xl border border-border bg-white/35 px-4 py-3 dark:bg-white/5">
     <span className="text-sm font-medium">{label}</span>
     <div className="flex items-center gap-2">
