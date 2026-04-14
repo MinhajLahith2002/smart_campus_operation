@@ -3,6 +3,18 @@ import { getRoleCredentials } from '../lib/authDefaults';
 
 const AuthContext = createContext(undefined);
 
+const normaliseUser = (role, details = {}) => {
+  const defaults = getRoleCredentials(role);
+  return {
+    id: details.id || defaults.id,
+    name: details.name || defaults.name,
+    email: details.email || defaults.email,
+    campusId: details.campusId || defaults.campusId,
+    role,
+    avatar: details.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`,
+  };
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
@@ -14,18 +26,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = (role, details = {}) => {
-    const defaults = getRoleCredentials(role);
-    const mockUser = {
-      id: details.id || defaults.id,
-      name: details.name || defaults.name,
-      email: details.email || defaults.email,
-      campusId: details.campusId || defaults.campusId,
-      role,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`,
-    };
+    const nextUser = normaliseUser(role, details);
+    setUser(nextUser);
+    localStorage.setItem('hub_user', JSON.stringify(nextUser));
+    return nextUser;
+  };
 
-    setUser(mockUser);
-    localStorage.setItem('hub_user', JSON.stringify(mockUser));
+  const setAuthenticatedUser = (details) => {
+    const nextUser = normaliseUser(details.role, details);
+    setUser(nextUser);
+    localStorage.setItem('hub_user', JSON.stringify(nextUser));
+    return nextUser;
   };
 
   const logout = () => {
@@ -34,7 +45,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, logout, setAuthenticatedUser, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

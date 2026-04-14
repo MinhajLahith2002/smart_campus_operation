@@ -1,9 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Image as ImageIcon, MapPin, MessageSquare, Paperclip, Pencil, PhoneCall, ShieldAlert, Trash2, UserRoundCog, Wrench, X } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../components/ui/Primitives';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Clock3,
+  Gauge,
+  Image as ImageIcon,
+  MapPin,
+  MessageSquare,
+  Paperclip,
+  Pencil,
+  PhoneCall,
+  Radar,
+  ShieldAlert,
+  Sparkles,
+  Trash2,
+  UserRoundCog,
+  Wrench,
+  X,
+} from 'lucide-react';
+import { Badge, Button, Card } from '../components/ui/Primitives';
 import { addComment, assignTechnician, closeTicket, deleteComment, getTicket, reopenTicket, toBackendRole, updateComment, updateTicketStatus } from '../lib/moduleCApi';
+import { maintenanceHealth } from '../lib/moduleCInsights';
 import { useAuth } from '../context/AuthContext';
 
 export const TicketDetailPage = () => {
@@ -38,6 +58,11 @@ export const TicketDetailPage = () => {
   const isAdmin = user?.role === 'ADMIN';
   const isTechnician = user?.role === 'TECHNICIAN' && user?.id === ticket?.assignedTechnicianId;
   const canComment = ticket && ['OPEN', 'IN_PROGRESS', 'RESOLVED'].includes(ticket.status) && (isReporter || isAdmin || isTechnician);
+  const healthScore = maintenanceHealth({
+    similarCount: Number(ticket?.similarOpenIncidents || 0),
+    priority: ticket?.priority || 'LOW',
+    evidenceCount: ticket?.evidenceLabels?.length || 0,
+  });
 
   const timeline = useMemo(() => {
     if (!ticket) return [];
@@ -166,6 +191,7 @@ export const TicketDetailPage = () => {
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL' ? 'danger' : ticket.priority === 'MEDIUM' ? 'warning' : 'neutral'}>{ticket.priority} priority</Badge>
               <Badge variant={ticket.status === 'IN_PROGRESS' ? 'info' : ticket.status === 'OPEN' ? 'warning' : ticket.status === 'REJECTED' ? 'danger' : 'success'}>{ticket.status.replace('_', ' ')}</Badge>
+              <Badge variant="info">Smart {ticket.smartPriorityLabel}</Badge>
             </div>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">{ticket.title}</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">{ticket.description}</p>
@@ -178,6 +204,7 @@ export const TicketDetailPage = () => {
               <InlineRow icon={<MapPin size={14} />} label="Location" value={ticket.resourceLocation || 'Unknown'} />
               <InlineRow icon={<Wrench size={14} />} label="Assignee" value={ticket.assignedTechnicianName || 'Unassigned'} />
               <InlineRow icon={<Clock3 size={14} />} label="Age" value={formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })} />
+              <InlineRow icon={<Radar size={14} />} label="Response target" value={ticket.responseTarget || 'Under review'} />
             </div>
           </div>
         </div>
@@ -194,6 +221,15 @@ export const TicketDetailPage = () => {
               <DetailCard icon={<UserRoundCog size={16} className="text-primary" />} title="Assigned technician" copy={ticket.assignedTechnicianName || ticket.assignedTechnicianId || 'Unassigned'} />
               <DetailCard icon={<Paperclip size={16} className="text-primary" />} title="Evidence references" copy={ticket.evidenceLabels?.length ? `${ticket.evidenceLabels.length} item(s)` : ticket.evidenceNotes || 'No evidence reference supplied.'} />
               <DetailCard icon={<AlertTriangle size={16} className="text-primary" />} title="Reported on" copy={format(new Date(ticket.createdAt), 'PPP p')} />
+            </div>
+          </Card>
+
+          <Card className="bg-primary/5 p-6 border-primary/20">
+            <div className="mb-4 flex items-center gap-2 text-xl font-semibold"><Sparkles size={18} className="text-primary" /> Incident intelligence</div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <SignalCard icon={<Gauge size={16} className="text-primary" />} title="Smart priority score" value={`${ticket.smartPriorityScore || 0}/100`} copy={`System reading suggests ${ticket.smartPriorityLabel || 'LOW'} urgency.`} />
+              <SignalCard icon={<Radar size={16} className="text-primary" />} title="Pattern watch" value={`${ticket.similarOpenIncidents || 0} active`} copy="Similar open incidents across the same resource or category." />
+              <SignalCard icon={<ShieldAlert size={16} className="text-primary" />} title="Maintenance health" value={`${healthScore}%`} copy="Higher scores suggest fewer repeat-failure signals around this asset." />
             </div>
           </Card>
 
@@ -263,8 +299,9 @@ export const TicketDetailPage = () => {
               <div className="rounded-2xl border border-border bg-white/45 p-4 dark:bg-white/5">
                 <label className="mb-2 block text-sm font-semibold">{editingCommentId ? 'Edit comment' : 'Add comment'}</label>
                 <textarea className="min-h-28 w-full rounded-xl border border-border bg-white/60 px-3 py-3 text-sm dark:bg-white/5" value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder={canComment ? 'Add a contextual update to the discussion.' : 'Comments are disabled for this role or ticket state.'} disabled={!canComment} />
+                <p className="mt-2 text-xs text-muted-foreground">Comments need at least 5 characters and are blocked after close or rejection.</p>
                 <div className="mt-3 flex flex-wrap gap-3">
-                  <Button className="gap-2" onClick={submitComment} isLoading={busyAction === 'add-comment' || busyAction === 'edit-comment'} disabled={!canComment || !commentDraft.trim()}>
+                  <Button className="gap-2" onClick={submitComment} isLoading={busyAction === 'add-comment' || busyAction === 'edit-comment'} disabled={!canComment || commentDraft.trim().length < 5}>
                     {editingCommentId ? 'Save Comment' : 'Post Comment'}
                   </Button>
                   {editingCommentId && <Button variant="outline" onClick={() => { setEditingCommentId(null); setCommentDraft(''); }}>Cancel Edit</Button>}
@@ -356,7 +393,7 @@ export const TicketDetailPage = () => {
             <div className="flex h-72 items-center justify-center rounded-3xl border border-white/10 bg-gradient-to-br from-sky-500/20 via-indigo-500/15 to-cyan-400/25">
               <ImageIcon size={72} className="text-cyan-200" />
             </div>
-            <p className="mt-4 text-sm text-slate-300">This demo build stores evidence references instead of binary uploads, but the gallery and preview behavior are now represented in the Module C UI.</p>
+            <p className="mt-4 text-sm text-slate-300">This demo build still stores evidence references rather than binary uploads, but the evidence experience now behaves like a richer operations gallery.</p>
           </div>
         </div>
       )}
@@ -368,6 +405,14 @@ const DetailCard = ({ icon, title, copy }) => (
   <div className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
     <div className="mb-2 flex items-center gap-2 font-semibold">{icon}{title}</div>
     <p className="text-sm leading-7 text-muted-foreground">{copy}</p>
+  </div>
+);
+
+const SignalCard = ({ icon, title, value, copy }) => (
+  <div className="rounded-2xl border border-border bg-white/45 px-4 py-4 dark:bg-white/5">
+    <div className="mb-2 flex items-center gap-2 font-semibold">{icon}{title}</div>
+    <p className="text-2xl font-semibold">{value}</p>
+    <p className="mt-2 text-sm leading-7 text-muted-foreground">{copy}</p>
   </div>
 );
 

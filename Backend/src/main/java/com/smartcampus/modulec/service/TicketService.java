@@ -23,12 +23,20 @@ import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
 public class TicketService {
+
+    private static final Set<String> CRITICAL_KEYWORDS = Set.of("fire", "smoke", "flood", "gas leak", "electric shock", "sparking", "collapse", "unsafe", "injury");
+    private static final Set<String> HIGH_KEYWORDS = Set.of("network down", "lab closed", "water leak", "power outage", "security", "camera offline", "server down");
+    private static final Set<String> MEDIUM_KEYWORDS = Set.of("projector", "air conditioner", "wifi", "router", "printer", "lighting", "door");
 
     private final TicketRepository ticketRepository;
     private final TicketCommentRepository ticketCommentRepository;
@@ -40,37 +48,42 @@ public class TicketService {
 
     public TicketResponse createTicket(CreateTicketRequest request) {
         OffsetDateTime now = OffsetDateTime.now();
+        validateCreateRequest(request);
 
         Ticket ticket = new Ticket();
-        ticket.setTitle(request.title());
-        ticket.setDescription(request.description());
+        ticket.setTitle(request.title().trim());
+        ticket.setDescription(request.description().trim());
         ticket.setCategory(request.category());
         ticket.setPriority(request.priority());
         ticket.setStatus(TicketStatus.OPEN);
-        ticket.setReporterId(request.reporterId());
-        ticket.setReporterName(request.reporterName());
-        ticket.setReporterEmail(request.reporterEmail());
+        ticket.setReporterId(request.reporterId().trim());
+        ticket.setReporterName(request.reporterName().trim());
+        ticket.setReporterEmail(request.reporterEmail().trim());
         ticket.setReporterRole(request.reporterRole());
-        ticket.setResourceName(request.resourceName());
-        ticket.setResourceLocation(request.resourceLocation());
-        ticket.setResourceType(request.resourceType());
-        ticket.setPreferredContact(request.preferredContact());
-        ticket.setOperationalImpact(request.operationalImpact());
-        ticket.setEvidenceNotes(request.evidenceNotes());
+        ticket.setResourceName(request.resourceName().trim());
+        ticket.setResourceLocation(request.resourceLocation().trim());
+        ticket.setResourceType(trimToNull(request.resourceType()));
+        ticket.setPreferredContact(trimToNull(request.preferredContact()));
+        ticket.setOperationalImpact(request.operationalImpact().trim());
+        ticket.setEvidenceNotes(trimToNull(request.evidenceNotes()));
         ticket.setCreatedAt(now);
         ticket.setUpdatedAt(now);
 
         if (request.evidenceLabels() != null) {
-            request.evidenceLabels().stream().limit(3).forEach(label -> {
-                TicketEvidence evidence = new TicketEvidence();
-                evidence.setTicket(ticket);
-                evidence.setLabel(label);
-                ticket.getEvidenceItems().add(evidence);
-            });
+            request.evidenceLabels().stream()
+                    .map(String::trim)
+                    .filter(label -> !label.isBlank())
+                    .limit(3)
+                    .forEach(label -> {
+                        TicketEvidence evidence = new TicketEvidence();
+                        evidence.setTicket(ticket);
+                        evidence.setLabel(label);
+                        ticket.getEvidenceItems().add(evidence);
+                    });
         }
 
-        addActivity(ticket, request.reporterName(), request.reporterRole(), "TICKET_CREATED",
-                "Ticket logged with resource, incident description, and evidence references.");
+        addActivity(ticket, request.reporterName().trim(), request.reporterRole(), "TICKET_CREATED",
+                "Ticket logged with resource, incident description, evidence references, and smart triage context.");
 
         return map(ticketRepository.save(ticket));
     }
@@ -97,16 +110,17 @@ public class TicketService {
     public TicketResponse assignTechnician(Long ticketId, AssignTechnicianRequest request) {
         Ticket ticket = findTicket(ticketId);
         ensureAdmin(request.actorRole(), "Only admins can assign technicians.");
+        validateAssignment(request);
 
-        ticket.setAssignedTechnicianId(request.technicianId());
-        ticket.setAssignedTechnicianName(request.technicianName());
+        ticket.setAssignedTechnicianId(request.technicianId().trim());
+        ticket.setAssignedTechnicianName(request.technicianName().trim());
         ticket.setUpdatedAt(OffsetDateTime.now());
 
         addActivity(ticket,
                 fallbackActorName(request.actorName(), "Operations Desk"),
                 request.actorRole(),
                 "TECHNICIAN_ASSIGNED",
-                "Assigned to " + request.technicianName() + " (" + request.technicianId() + ").");
+                "Assigned to " + request.technicianName().trim() + " (" + request.technicianId().trim() + ").");
 
         return map(ticketRepository.save(ticket));
     }
@@ -121,17 +135,17 @@ public class TicketService {
         if (nextStatus == TicketStatus.CLOSED || nextStatus == TicketStatus.OPEN) {
             throw new IllegalArgumentException("Use the close or reopen workflow for that transition.");
         }
-        if (nextStatus == TicketStatus.RESOLVED && (request.resolutionNotes() == null || request.resolutionNotes().isBlank())) {
+        if (nextStatus == TicketStatus.RESOLVED && isBlank(request.resolutionNotes())) {
             throw new IllegalArgumentException("Resolution notes are required when resolving a ticket.");
         }
-        if (nextStatus == TicketStatus.REJECTED && (request.detail() == null || request.detail().isBlank())) {
+        if (nextStatus == TicketStatus.REJECTED && isBlank(request.detail())) {
             throw new IllegalArgumentException("A rejection reason is required when rejecting a ticket.");
         }
         ensureTransitionAllowed(currentStatus, nextStatus);
 
         ticket.setStatus(nextStatus);
-        if (request.resolutionNotes() != null && !request.resolutionNotes().isBlank()) {
-            ticket.setResolutionNotes(request.resolutionNotes());
+        if (!isBlank(request.resolutionNotes())) {
+            ticket.setResolutionNotes(request.resolutionNotes().trim());
         }
         ticket.setUpdatedAt(OffsetDateTime.now());
 
@@ -139,9 +153,9 @@ public class TicketService {
                 fallbackActorName(request.actorName(), "Module C Desk"),
                 request.actorRole(),
                 "STATUS_UPDATED",
-                request.detail() == null || request.detail().isBlank()
+                isBlank(request.detail())
                         ? "Ticket moved to " + nextStatus.name() + "."
-                        : request.detail());
+                        : request.detail().trim());
 
         return map(ticketRepository.save(ticket));
     }
@@ -159,9 +173,7 @@ public class TicketService {
                 fallbackActorName(request.actorName(), "Ticket Reporter"),
                 request.actorRole(),
                 "TICKET_CLOSED",
-                request.note() == null || request.note().isBlank()
-                        ? "Resolution confirmed and ticket closed."
-                        : request.note());
+                isBlank(request.note()) ? "Resolution confirmed and ticket closed." : request.note().trim());
 
         return map(ticketRepository.save(ticket));
     }
@@ -172,7 +184,7 @@ public class TicketService {
         if (ticket.getStatus() != TicketStatus.RESOLVED) {
             throw new IllegalArgumentException("Only resolved tickets can be reopened.");
         }
-        if (request.note() == null || request.note().isBlank()) {
+        if (isBlank(request.note())) {
             throw new IllegalArgumentException("A reopen note is required when reporting the issue as still broken.");
         }
 
@@ -182,7 +194,7 @@ public class TicketService {
                 fallbackActorName(request.actorName(), "Ticket Reporter"),
                 request.actorRole(),
                 "TICKET_REOPENED",
-                request.note());
+                request.note().trim());
 
         return map(ticketRepository.save(ticket));
     }
@@ -191,11 +203,12 @@ public class TicketService {
         Ticket ticket = findTicket(ticketId);
         ensureCanView(ticket, request.actorId(), request.actorRole(), "You cannot comment on this ticket.");
         ensureCommentable(ticket);
+        validateCommentBody(request.body());
 
         TicketComment comment = new TicketComment();
         comment.setTicket(ticket);
-        comment.setAuthorId(request.actorId());
-        comment.setAuthorName(request.actorName());
+        comment.setAuthorId(request.actorId().trim());
+        comment.setAuthorName(request.actorName().trim());
         comment.setAuthorRole(request.actorRole());
         comment.setBody(request.body().trim());
         comment.setCreatedAt(OffsetDateTime.now());
@@ -204,7 +217,7 @@ public class TicketService {
         comment.setDeleted(false);
         ticket.setUpdatedAt(OffsetDateTime.now());
 
-        addActivity(ticket, request.actorName(), request.actorRole(), "COMMENT_ADDED", "New comment added to the ticket discussion.");
+        addActivity(ticket, request.actorName().trim(), request.actorRole(), "COMMENT_ADDED", "New comment added to the ticket discussion.");
         ticketRepository.save(ticket);
         TicketComment savedComment = ticketCommentRepository.save(comment);
         return mapComment(savedComment);
@@ -218,13 +231,14 @@ public class TicketService {
         if (!request.actorId().equals(comment.getAuthorId())) {
             throw new SecurityException("Only the comment owner can edit this comment.");
         }
+        validateCommentBody(request.body());
 
         comment.setBody(request.body().trim());
         comment.setUpdatedAt(OffsetDateTime.now());
         comment.setEdited(true);
         ticket.setUpdatedAt(OffsetDateTime.now());
 
-        addActivity(ticket, request.actorName(), request.actorRole(), "COMMENT_EDITED", "A comment was edited by its owner.");
+        addActivity(ticket, request.actorName().trim(), request.actorRole(), "COMMENT_EDITED", "A comment was edited by its owner.");
         ticketRepository.save(ticket);
         return mapComment(comment);
     }
@@ -338,8 +352,64 @@ public class TicketService {
         }
     }
 
+    private void validateCreateRequest(CreateTicketRequest request) {
+        if (request.title().trim().length() < 8) {
+            throw new IllegalArgumentException("Ticket title must be at least 8 characters.");
+        }
+        if (request.description().trim().length() < 30) {
+            throw new IllegalArgumentException("Incident description must be at least 30 characters.");
+        }
+        if (request.operationalImpact() == null || request.operationalImpact().trim().length() < 12) {
+            throw new IllegalArgumentException("Operational impact must be at least 12 characters.");
+        }
+        if (request.preferredContact() == null || request.preferredContact().trim().isBlank()) {
+            throw new IllegalArgumentException("Preferred contact is required.");
+        }
+        if (request.evidenceLabels() != null) {
+            if (request.evidenceLabels().size() > 3) {
+                throw new IllegalArgumentException("Only up to 3 evidence references are allowed.");
+            }
+            Set<String> uniqueLabels = request.evidenceLabels().stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(label -> !label.isBlank())
+                    .map(label -> label.toLowerCase(Locale.ROOT))
+                    .collect(Collectors.toSet());
+            long nonBlankCount = request.evidenceLabels().stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(label -> !label.isBlank())
+                    .count();
+            if (uniqueLabels.size() != nonBlankCount) {
+                throw new IllegalArgumentException("Evidence references must be unique.");
+            }
+        }
+
+        TicketPriority suggestedPriority = deriveSuggestedPriority(
+                request.title(), request.description(), request.operationalImpact(), request.category().name(),
+                request.evidenceLabels() == null ? 0 : (int) request.evidenceLabels().stream().filter(Objects::nonNull).map(String::trim).filter(label -> !label.isBlank()).count());
+        if (priorityRank(request.priority()) + 1 < priorityRank(suggestedPriority)) {
+            throw new IllegalArgumentException("The incident language suggests at least " + suggestedPriority.name() + " priority. Increase the selected priority or reduce the urgency wording.");
+        }
+    }
+
+    private void validateAssignment(AssignTechnicianRequest request) {
+        if (isBlank(request.technicianId()) || isBlank(request.technicianName())) {
+            throw new IllegalArgumentException("Technician ID and name are required for assignment.");
+        }
+    }
+
+    private void validateCommentBody(String body) {
+        if (body == null || body.trim().length() < 5) {
+            throw new IllegalArgumentException("Comments must be at least 5 characters.");
+        }
+        if (body.trim().length() > 500) {
+            throw new IllegalArgumentException("Comments must be 500 characters or fewer.");
+        }
+    }
+
     private String fallbackActorName(String actorName, String fallback) {
-        return actorName == null || actorName.isBlank() ? fallback : actorName;
+        return actorName == null || actorName.isBlank() ? fallback : actorName.trim();
     }
 
     private void addActivity(Ticket ticket, String actorName, UserRole actorRole, String action, String detail) {
@@ -368,6 +438,12 @@ public class TicketService {
     }
 
     private TicketResponse map(Ticket ticket) {
+        long similarOpenIncidents = countSimilarOpenIncidents(ticket);
+        int completenessScore = calculateCompleteness(ticket);
+        int smartPriorityScore = calculateIncidentScore(ticket);
+        String smartPriorityLabel = deriveSuggestedPriority(ticket.getTitle(), ticket.getDescription(), ticket.getOperationalImpact(), ticket.getCategory().name(), ticket.getEvidenceItems().size()).name();
+        String responseTarget = responseTargetFor(smartPriorityLabel);
+
         return new TicketResponse(
                 ticket.getId(),
                 ticket.getTitle(),
@@ -400,7 +476,97 @@ public class TicketService {
                                 activity.getDetail(),
                                 activity.getCreatedAt()))
                         .toList(),
-                ticket.getComments().stream().map(this::mapComment).toList()
+                ticket.getComments().stream().map(this::mapComment).toList(),
+                similarOpenIncidents,
+                completenessScore,
+                smartPriorityScore,
+                smartPriorityLabel,
+                responseTarget
         );
+    }
+
+    private long countSimilarOpenIncidents(Ticket ticket) {
+        return ticketRepository.findAll().stream()
+                .filter(other -> !Objects.equals(other.getId(), ticket.getId()))
+                .filter(other -> other.getStatus() != TicketStatus.CLOSED && other.getStatus() != TicketStatus.REJECTED)
+                .filter(other -> Objects.equals(normalise(other.getResourceName()), normalise(ticket.getResourceName()))
+                        || Objects.equals(other.getCategory(), ticket.getCategory()))
+                .count();
+    }
+
+    private int calculateCompleteness(Ticket ticket) {
+        int score = 0;
+        if (!isBlank(ticket.getTitle()) && ticket.getTitle().trim().length() >= 8) score += 20;
+        if (!isBlank(ticket.getDescription()) && ticket.getDescription().trim().length() >= 30) score += 30;
+        if (!isBlank(ticket.getOperationalImpact()) && ticket.getOperationalImpact().trim().length() >= 12) score += 20;
+        if (!isBlank(ticket.getPreferredContact())) score += 15;
+        if (!ticket.getEvidenceItems().isEmpty()) score += 15;
+        return score;
+    }
+
+    private int calculateIncidentScore(Ticket ticket) {
+        return calculateIncidentScore(ticket.getTitle(), ticket.getDescription(), ticket.getOperationalImpact(), ticket.getCategory().name(), ticket.getEvidenceItems().size());
+    }
+
+    private int calculateIncidentScore(String title, String description, String operationalImpact, String category, int evidenceCount) {
+        String text = (defaultString(title) + " " + defaultString(description) + " " + defaultString(operationalImpact)).toLowerCase(Locale.ROOT);
+        int score = 22;
+
+        if ("SAFETY".equals(category)) score += 28;
+        if ("NETWORK".equals(category)) score += 10;
+        if (evidenceCount > 0) score += Math.min(evidenceCount * 8, 24);
+        if (defaultString(description).trim().length() >= 80) score += 12;
+        if (defaultString(operationalImpact).trim().length() >= 20) score += 10;
+        score += keywordHits(text, CRITICAL_KEYWORDS) * 18;
+        score += keywordHits(text, HIGH_KEYWORDS) * 10;
+        score += keywordHits(text, MEDIUM_KEYWORDS) * 4;
+
+        return Math.min(score, 100);
+    }
+
+    private TicketPriority deriveSuggestedPriority(String title, String description, String operationalImpact, String category, int evidenceCount) {
+        int score = calculateIncidentScore(title, description, operationalImpact, category, evidenceCount);
+        if (score >= 82) return TicketPriority.CRITICAL;
+        if (score >= 62) return TicketPriority.HIGH;
+        if (score >= 40) return TicketPriority.MEDIUM;
+        return TicketPriority.LOW;
+    }
+
+    private String responseTargetFor(String priority) {
+        return switch (priority) {
+            case "CRITICAL" -> "Immediate dispatch";
+            case "HIGH" -> "Within 4 working hours";
+            case "MEDIUM" -> "Within 1 working day";
+            default -> "Within 2 working days";
+        };
+    }
+
+    private int priorityRank(TicketPriority priority) {
+        return switch (priority) {
+            case LOW -> 1;
+            case MEDIUM -> 2;
+            case HIGH -> 3;
+            case CRITICAL -> 4;
+        };
+    }
+
+    private int keywordHits(String text, Set<String> keywords) {
+        return (int) keywords.stream().filter(text::contains).count();
+    }
+
+    private String defaultString(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String normalise(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isBlank();
+    }
+
+    private String trimToNull(String value) {
+        return isBlank(value) ? null : value.trim();
     }
 }

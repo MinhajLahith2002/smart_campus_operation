@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Card, Button, Badge } from '../components/ui/Primitives';
-import { MOCK_BOOKINGS, MOCK_RESOURCES, MOCK_TICKETS } from '../mockData';
+import { getBookingSummary, getBookings, getNotificationSummary, getResources, getResourceSummary } from '../lib/operationsApi';
 import { getTicketSummary, getTickets } from '../lib/moduleCApi';
 import { cn } from '../lib/utils';
 
@@ -28,35 +28,50 @@ export const Dashboard = () => {
   const firstName = user?.name.split(' ')[0] ?? 'Operator';
   const [incidentSummary, setIncidentSummary] = useState(null);
   const [incidentTickets, setIncidentTickets] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [bookingSummary, setBookingSummary] = useState(null);
+  const [resourceSummary, setResourceSummary] = useState(null);
+  const [resources, setResources] = useState([]);
+  const [notificationSummary, setNotificationSummary] = useState(null);
 
   useEffect(() => {
     let ignore = false;
-    const loadIncidentSnapshot = async () => {
+    const loadDashboard = async () => {
       try {
-        const [summaryData, ticketData] = await Promise.all([
+        const [ticketSummaryData, ticketData, bookingData, bookingSummaryData, resourceData, resourceSummaryData, notificationSummaryData] = await Promise.all([
           getTicketSummary(),
           getTickets({ role: user?.role, userId: user?.id, assignedToMe: isTechnician }),
+          getBookings({ role: isAdmin ? 'ADMIN' : user?.role, userId: isAdmin ? undefined : user?.id }),
+          getBookingSummary(),
+          getResources(),
+          getResourceSummary(),
+          getNotificationSummary({ role: user?.role, userId: user?.id }),
         ]);
-        if (!ignore) {
-          setIncidentSummary(summaryData);
-          setIncidentTickets(ticketData.slice(0, 3));
-        }
+        if (ignore) return;
+        setIncidentSummary(ticketSummaryData);
+        setIncidentTickets(ticketData.slice(0, 3));
+        setBookings(bookingData.slice(0, 3));
+        setBookingSummary(bookingSummaryData);
+        setResources(resourceData);
+        setResourceSummary(resourceSummaryData);
+        setNotificationSummary(notificationSummaryData);
       } catch (_) {
-        if (!ignore) {
-          setIncidentSummary(null);
-          setIncidentTickets([]);
-        }
+        if (ignore) return;
+        setIncidentSummary(null);
+        setIncidentTickets([]);
       }
     };
-    if (user) loadIncidentSnapshot();
+    if (user) loadDashboard();
     return () => { ignore = true; };
-  }, [user, isTechnician]);
+  }, [user, isTechnician, isAdmin]);
 
-  const approvedBookings = MOCK_BOOKINGS.filter((booking) => booking.status === 'APPROVED').length;
-  const activeResources = MOCK_RESOURCES.filter((resource) => resource.status === 'ACTIVE').length;
-  const openTickets = incidentSummary?.open ?? MOCK_TICKETS.filter((ticket) => ticket.status !== 'CLOSED').length;
+  const approvedBookings = bookingSummary?.approved ?? bookings.filter((booking) => booking.status === 'APPROVED').length;
+  const activeResources = resourceSummary?.activeResources ?? resources.filter((resource) => resource.status === 'ACTIVE').length;
+  const resourceCount = resourceSummary?.totalResources ?? resources.length;
+  const openTickets = incidentSummary?.open ?? incidentTickets.filter((ticket) => ticket.status !== 'CLOSED').length;
+  const unreadSignals = notificationSummary?.unread ?? 0;
   const roleTicketRoute = isAdmin ? '/admin/tickets' : isTechnician ? '/tickets/assigned' : '/tickets/my';
-  const incidentQueue = incidentTickets.length ? incidentTickets : MOCK_TICKETS;
+  const incidentQueue = incidentTickets;
   const heroTitle = isAdmin
     ? `Welcome back, ${firstName}. The incident desk has decisions waiting.`
     : isTechnician
@@ -95,44 +110,44 @@ export const Dashboard = () => {
             <div className="mt-6 grid grid-cols-2 gap-4">
               <SignalPanel label="Active bookings" value={`${approvedBookings}`} accent="text-emerald-300" />
               <SignalPanel label={isTechnician ? 'Assigned incidents' : 'Open incidents'} value={`${isTechnician ? incidentQueue.length : openTickets}`} accent="text-amber-300" />
-              <SignalPanel label="Assets online" value={`${activeResources}/${MOCK_RESOURCES.length}`} accent="text-cyan-300" />
-              <SignalPanel label="Priority alerts" value={`${incidentSummary?.highOrCritical ?? 1}`} accent="text-violet-300" />
+              <SignalPanel label="Assets online" value={`${activeResources}/${resourceCount || 0}`} accent="text-cyan-300" />
+              <SignalPanel label="Signals unread" value={`${unreadSignals}`} accent="text-violet-300" />
             </div>
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Bookings approved" value={`${approvedBookings}`} trend="2 approvals since yesterday" icon={<Calendar className="text-primary" />} />
+        <StatCard label="Bookings approved" value={`${approvedBookings}`} trend="Live booking desk summary" icon={<Calendar className="text-primary" />} />
         <StatCard label={isTechnician ? 'Assigned tickets' : 'Open tickets'} value={`${isTechnician ? incidentQueue.length : openTickets}`} trend={isAdmin ? 'Admin triage queue monitored' : isTechnician ? 'Technician work queue focused' : 'Reporter-visible progress tracking'} icon={<Ticket className="text-warning" />} />
-        <StatCard label="Signals unread" value={`${incidentSummary?.highOrCritical ?? 1}`} trend="Module C alerts kept visible" icon={<Bell className="text-secondary-accent" />} />
-        <StatCard label="Assets active" value={`${activeResources}`} trend="95% service availability" icon={<CheckCircle2 className="text-success" />} />
+        <StatCard label="Signals unread" value={`${unreadSignals}`} trend="Notification queue from backend" icon={<Bell className="text-secondary-accent" />} />
+        <StatCard label="Assets active" value={`${activeResources}`} trend="Live resource availability" icon={<CheckCircle2 className="text-success" />} />
       </section>
 
       <div className="grid gap-8 xl:grid-cols-[1.1fr_1.1fr_0.8fr]">
         <section className="space-y-4">
           <SectionHeader title="Upcoming bookings" to="/bookings/my" />
           <div className="space-y-3">
-            {MOCK_BOOKINGS.map((booking) => {
-              const resource = MOCK_RESOURCES.find((item) => item.id === booking.resourceId);
+            {bookings.map((booking) => {
+              const resource = resources.find((item) => item.id === booking.resourceId);
               return (
                 <Card key={booking.id} className="group bg-white/70 p-5 dark:bg-white/5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex gap-4">
                       <div className="h-14 w-14 overflow-hidden rounded-2xl bg-muted">
-                        <img src={resource?.imageUrl} alt={resource?.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                        {resource?.imageUrl ? <img src={resource.imageUrl} alt={resource?.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" /> : null}
                       </div>
                       <div>
-                        <h3 className="text-base font-semibold">{resource?.name}</h3>
+                        <h3 className="text-base font-semibold">{booking.resourceName}</h3>
                         <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><Calendar size={12} />{format(new Date(booking.date), 'MMM d, yyyy')}</span>
-                          <span className="flex items-center gap-1"><Clock size={12} />{booking.startTime} - {booking.endTime}</span>
-                          <span className="flex items-center gap-1"><MapPin size={12} />{resource?.location}</span>
+                          <span className="flex items-center gap-1"><Calendar size={12} />{format(new Date(booking.bookingDate), 'MMM d, yyyy')}</span>
+                          <span className="flex items-center gap-1"><Clock size={12} />{booking.startTime.slice(0, 5)} - {booking.endTime.slice(0, 5)}</span>
+                          <span className="flex items-center gap-1"><MapPin size={12} />{booking.resourceLocation}</span>
                         </div>
                         <p className="mt-3 text-sm text-muted-foreground">{booking.purpose}</p>
                       </div>
                     </div>
-                    <Badge variant={booking.status === 'APPROVED' ? 'success' : 'warning'}>{booking.status}</Badge>
+                    <Badge variant={booking.status === 'APPROVED' ? 'success' : booking.status === 'PENDING' ? 'warning' : booking.status === 'REJECTED' ? 'danger' : 'neutral'}>{booking.status}</Badge>
                   </div>
                 </Card>
               );
@@ -153,7 +168,7 @@ export const Dashboard = () => {
                     </div>
                     <p className="mt-4 text-base font-semibold">{ticket.title || ticket.description}</p>
                     <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><MapPin size={12} />{ticket.resourceLocation || ticket.location || 'Campus asset'}</span>
+                      <span className="flex items-center gap-1"><MapPin size={12} />{ticket.resourceLocation || 'Campus asset'}</span>
                       <span className="flex items-center gap-1"><Clock size={12} />Reported {format(new Date(ticket.createdAt), 'MMM d')}</span>
                     </div>
                   </div>
@@ -178,9 +193,9 @@ export const Dashboard = () => {
           <Card className="space-y-4 bg-white/70 p-5 dark:bg-white/5">
             <p className="text-sm font-semibold">System readiness</p>
             <StatusItem label="Network" status="Operational" type="success" />
-            <StatusItem label="Facilities" status="98% active" type="success" />
+            <StatusItem label="Facilities" status={`${activeResources}/${resourceCount || 0} active`} type="success" />
             <StatusItem label="Maintenance queue" status={`${incidentSummary?.total ?? incidentQueue.length} tracked`} type="warning" />
-            <StatusItem label="AV equipment" status={`${openTickets} open`} type="danger" />
+            <StatusItem label="Signals" status={`${unreadSignals} unread`} type={unreadSignals ? 'danger' : 'success'} />
           </Card>
 
           {isAdmin && (

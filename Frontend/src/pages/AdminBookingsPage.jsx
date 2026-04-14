@@ -1,11 +1,74 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { CalendarClock, CheckCircle2, CircleOff, Layers3, MapPin, Users } from 'lucide-react';
-import { Card, Badge, Button } from '../components/ui/Primitives';
-import { MOCK_BOOKINGS, MOCK_RESOURCES } from '../mockData';
+import { Card, Badge, Button, Input } from '../components/ui/Primitives';
+import { approveBooking, getBookingSummary, getBookings, rejectBooking } from '../lib/operationsApi';
+import { useAuth } from '../context/AuthContext';
+import { toBackendRole } from '../lib/moduleCApi';
 
 export const AdminBookingsPage = () => {
-  const pendingBookings = MOCK_BOOKINGS.filter((item) => item.status === 'PENDING');
+  const { user } = useAuth();
+  const [bookings, setBookings] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyBookingId, setBusyBookingId] = useState(null);
+  const [rejectionDrafts, setRejectionDrafts] = useState({});
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [bookingData, summaryData] = await Promise.all([
+        getBookings({ role: 'ADMIN' }),
+        getBookingSummary(),
+      ]);
+      setBookings(bookingData);
+      setSummary(summaryData);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to load booking desk data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const pendingBookings = useMemo(() => bookings.filter((item) => item.status === 'PENDING'), [bookings]);
+
+  const adminActor = {
+    actorId: user?.id,
+    actorName: user?.name,
+    actorRole: toBackendRole(user?.role),
+  };
+
+  const handleApprove = async (bookingId) => {
+    try {
+      setBusyBookingId(bookingId);
+      await approveBooking(bookingId, { ...adminActor, note: 'Approved from booking desk.' });
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Unable to approve this request.');
+    } finally {
+      setBusyBookingId(null);
+    }
+  };
+
+  const handleReject = async (bookingId) => {
+    try {
+      const note = rejectionDrafts[bookingId]?.trim() || 'Rejected by operations after policy review.';
+      setBusyBookingId(bookingId);
+      await rejectBooking(bookingId, { ...adminActor, note });
+      setRejectionDrafts((current) => ({ ...current, [bookingId]: '' }));
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Unable to reject this request.');
+    } finally {
+      setBusyBookingId(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -15,68 +78,77 @@ export const AdminBookingsPage = () => {
             <div className="eyebrow mb-4">Module B admin view</div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Booking Desk gives operations staff a clear approval queue and conflict-aware review surface.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-              The handover calls out booking management, optimized booking rules, and double-booking handling. This page turns the sidebar item into a proper administrative review queue with decisions and policy cues.
+              The handover calls out booking management, optimized booking rules, and double-booking handling. This page now runs against the live backend approval workflow.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <DeskMetric label="Pending review" value={`${pendingBookings.length}`} />
-            <DeskMetric label="Approved today" value={`${MOCK_BOOKINGS.filter((item) => item.status === 'APPROVED').length}`} />
-            <DeskMetric label="Rejected/conflict" value={`${MOCK_BOOKINGS.filter((item) => item.status === 'REJECTED').length}`} />
+            <DeskMetric label="Pending review" value={`${summary?.pending ?? pendingBookings.length}`} />
+            <DeskMetric label="Approved today" value={`${summary?.approved ?? 0}`} />
+            <DeskMetric label="Rejected/conflict" value={`${summary?.rejected ?? 0}`} />
           </div>
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Approval queue</h2>
-          <Badge variant="warning">{pendingBookings.length} waiting</Badge>
-        </div>
+      {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
+      {loading && <Card className="p-6 text-sm text-muted-foreground">Loading approval queue...</Card>}
 
-        <div className="space-y-3">
-          {MOCK_BOOKINGS.map((booking) => {
-            const resource = MOCK_RESOURCES.find((item) => item.id === booking.resourceId);
-            const isPending = booking.status === 'PENDING';
+      {!loading && (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Approval queue</h2>
+            <Badge variant="warning">{pendingBookings.length} waiting</Badge>
+          </div>
 
-            return (
-              <Card key={booking.id} className="bg-white/70 p-6 dark:bg-white/5">
-                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={booking.status === 'APPROVED' ? 'success' : booking.status === 'REJECTED' ? 'danger' : 'warning'}>
-                        {booking.status}
-                      </Badge>
-                      <Badge variant="info">#{booking.id}</Badge>
-                    </div>
-                    <h3 className="text-xl font-semibold">{resource?.name}</h3>
-                    <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                      <p className="flex items-center gap-2"><CalendarClock size={14} /> {format(new Date(booking.date), 'MMM d, yyyy')} â€¢ {booking.startTime} - {booking.endTime}</p>
-                      <p className="flex items-center gap-2"><Users size={14} /> {booking.attendees} attendees</p>
-                      <p className="flex items-center gap-2"><MapPin size={14} /> {resource?.location}</p>
-                      <p className="flex items-center gap-2"><Layers3 size={14} /> {booking.purpose}</p>
-                    </div>
-                    {booking.rejectionReason && (
-                      <div className="rounded-2xl border border-danger/15 bg-danger/6 px-4 py-3 text-sm text-danger">
-                        <span className="font-semibold">Conflict note:</span> {booking.rejectionReason}
+          <div className="space-y-3">
+            {bookings.map((booking) => {
+              const isPending = booking.status === 'PENDING';
+
+              return (
+                <Card key={booking.id} className="bg-white/70 p-6 dark:bg-white/5">
+                  <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={booking.status === 'APPROVED' ? 'success' : booking.status === 'REJECTED' ? 'danger' : 'warning'}>
+                          {booking.status}
+                        </Badge>
+                        <Badge variant="info">#{booking.id}</Badge>
                       </div>
-                    )}
-                  </div>
+                      <h3 className="text-xl font-semibold">{booking.resourceName}</h3>
+                      <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                        <p className="flex items-center gap-2"><CalendarClock size={14} /> {format(new Date(booking.bookingDate), 'MMM d, yyyy')} · {booking.startTime.slice(0, 5)} - {booking.endTime.slice(0, 5)}</p>
+                        <p className="flex items-center gap-2"><Users size={14} /> {booking.attendees} attendees</p>
+                        <p className="flex items-center gap-2"><MapPin size={14} /> {booking.resourceLocation}</p>
+                        <p className="flex items-center gap-2"><Layers3 size={14} /> {booking.purpose}</p>
+                      </div>
+                      {booking.rejectionReason && (
+                        <div className="rounded-2xl border border-danger/15 bg-danger/6 px-4 py-3 text-sm text-danger">
+                          <span className="font-semibold">Conflict note:</span> {booking.rejectionReason}
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="flex flex-col gap-3 xl:min-w-52">
-                    {isPending ? (
-                      <>
-                        <Button className="gap-2"><CheckCircle2 size={16} /> Approve request</Button>
-                        <Button variant="outline" className="gap-2 text-danger border-danger/20 hover:bg-danger/10"><CircleOff size={16} /> Reject request</Button>
-                      </>
-                    ) : (
-                      <Button variant="ghost">View audit trail</Button>
-                    )}
+                    <div className="flex flex-col gap-3 xl:min-w-64">
+                      {isPending ? (
+                        <>
+                          <Button className="gap-2" isLoading={busyBookingId === booking.id} onClick={() => handleApprove(booking.id)}><CheckCircle2 size={16} /> Approve request</Button>
+                          <Input
+                            placeholder="Rejection reason if declining"
+                            value={rejectionDrafts[booking.id] || ''}
+                            onChange={(event) => setRejectionDrafts((current) => ({ ...current, [booking.id]: event.target.value }))}
+                          />
+                          <Button variant="outline" className="gap-2 text-danger border-danger/20 hover:bg-danger/10" isLoading={busyBookingId === booking.id} onClick={() => handleReject(booking.id)}><CircleOff size={16} /> Reject request</Button>
+                        </>
+                      ) : (
+                        <Button variant="ghost">View audit trail</Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      </section>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 };

@@ -31,6 +31,11 @@ public record TicketResponse(
         OffsetDateTime updatedAt,
         List<String> evidenceLabels,
         List<TicketActivityResponse> activities,
-        List<TicketCommentResponse> comments
+        List<TicketCommentResponse> comments,
+        Long similarOpenIncidents,
+        Integer completenessScore,
+        Integer smartPriorityScore,
+        String smartPriorityLabel,
+        String responseTarget
 ) {
 }

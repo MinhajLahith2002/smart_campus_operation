@@ -1,21 +1,50 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Filter, Users, MapPin, Info, ArrowRight, Clock3, Layers3 } from 'lucide-react';
-import { MOCK_RESOURCES } from '../mockData';
 import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
+import { getResources, getResourceSummary } from '../lib/operationsApi';
 import { cn } from '../lib/utils';
 
 export const Catalogue = () => {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
+  const [resources, setResources] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const filteredResources = MOCK_RESOURCES.filter(r => {
-    const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase()) || 
-                         r.location.toLowerCase().includes(search.toLowerCase());
-    const matchesType = typeFilter === 'ALL' || r.type === typeFilter;
-    return matchesSearch && matchesType;
-  });
+  useEffect(() => {
+    let active = true;
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [resourceData, summaryData] = await Promise.all([
+          getResources(typeFilter),
+          getResourceSummary(),
+        ]);
+        if (!active) return;
+        setResources(resourceData);
+        setSummary(summaryData);
+        setError('');
+      } catch (err) {
+        if (!active) return;
+        setError(err.message || 'Unable to load resource catalogue.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [typeFilter]);
+
+  const filteredResources = useMemo(() => resources.filter((resource) => {
+    const query = search.toLowerCase();
+    return resource.name.toLowerCase().includes(query) || resource.location.toLowerCase().includes(query);
+  }), [resources, search]);
 
   return (
     <div className="space-y-8">
@@ -30,9 +59,9 @@ export const Catalogue = () => {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <MetricCard label="Resources listed" value={`${MOCK_RESOURCES.length}`} />
-            <MetricCard label="Ready to book" value={`${MOCK_RESOURCES.filter((r) => r.status === 'ACTIVE').length}`} />
-            <MetricCard label="Out of service" value={`${MOCK_RESOURCES.filter((r) => r.status !== 'ACTIVE').length}`} />
+            <MetricCard label="Resources listed" value={`${summary?.totalResources ?? resources.length}`} />
+            <MetricCard label="Ready to book" value={`${summary?.bookableResources ?? resources.filter((r) => r.bookingReady).length}`} />
+            <MetricCard label="Out of service" value={`${summary?.outOfServiceResources ?? resources.filter((r) => !r.bookingReady).length}`} />
           </div>
         </div>
 
@@ -70,86 +99,88 @@ export const Catalogue = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredResources.map((resource, index) => (
-          <motion.div
-            key={resource.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-          >
-            <Card className="group flex h-full flex-col overflow-hidden p-0 bg-white/70 dark:bg-white/5">
-              <div className="relative h-52 overflow-hidden">
-                <img
-                  src={resource.imageUrl}
-                  alt={resource.name}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-                <div className="absolute left-4 top-4">
-                  <Badge variant="info">{resource.type.replace('_', ' ')}</Badge>
-                </div>
-                <div className="absolute right-4 top-4">
-                  <Badge variant={resource.status === 'ACTIVE' ? 'success' : 'danger'}>
-                    {resource.status.replace('_', ' ')}
-                  </Badge>
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent opacity-80" />
-                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-white backdrop-blur-sm">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Booking window</p>
-                    <p className="mt-1 text-sm font-semibold">{resource.availableFrom} - {resource.availableTo}</p>
+      {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
+      {loading && <Card className="p-8 text-sm text-muted-foreground">Loading resource catalogue...</Card>}
+
+      {!loading && (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {filteredResources.map((resource, index) => (
+            <motion.div
+              key={resource.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <Card className="group flex h-full flex-col overflow-hidden p-0 bg-white/70 dark:bg-white/5">
+                <div className="relative h-52 overflow-hidden">
+                  <img
+                    src={resource.imageUrl}
+                    alt={resource.name}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+                  <div className="absolute left-4 top-4">
+                    <Badge variant="info">{resource.type.replace('_', ' ')}</Badge>
                   </div>
-                  <Clock3 size={18} className="text-slate-200" />
-                </div>
-              </div>
-
-              <div className="p-6 flex-1 flex flex-col">
-                <h3 className="text-xl font-semibold group-hover:text-primary transition-colors">{resource.name}</h3>
-                <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                  {resource.description}
-                </p>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <ResourceMeta icon={<MapPin size={14} />} label="Location" value={resource.location} />
-                  <ResourceMeta icon={<Users size={14} />} label="Capacity" value={`${resource.capacity}`} />
-                </div>
-
-                <div className="space-y-2 mb-6 flex-1">
-                  <div className="mt-6 rounded-2xl bg-muted/70 px-4 py-3 dark:bg-white/5">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">
-                      <Layers3 size={12} />
-                      Operational note
+                  <div className="absolute right-4 top-4">
+                    <Badge variant={resource.bookingReady ? 'success' : 'danger'}>
+                      {resource.status.replace('_', ' ')}
+                    </Badge>
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent opacity-80" />
+                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-white backdrop-blur-sm">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Booking window</p>
+                      <p className="mt-1 text-sm font-semibold">{resource.availableFrom.slice(0, 5)} - {resource.availableTo.slice(0, 5)}</p>
                     </div>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {resource.status === 'ACTIVE'
-                        ? 'Ready for request submission and schedule review.'
-                        : 'Currently unavailable while campus teams resolve a service or maintenance issue.'}
-                    </p>
+                    <Clock3 size={18} className="text-slate-200" />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-4 border-t border-border">
-                  <Link to={`/bookings/new?resourceId=${resource.id}`} className="flex-1">
-                    <Button
-                      className="w-full gap-2"
-                      disabled={resource.status !== 'ACTIVE'}
-                    >
-                      Book Now <ArrowRight size={16} />
-                    </Button>
-                  </Link>
-                  <Button variant="outline" size="icon" aria-label={`View details for ${resource.name}`}>
-                    <Info size={18} />
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
+                <div className="flex flex-1 flex-col p-6">
+                  <h3 className="text-xl font-semibold group-hover:text-primary transition-colors">{resource.name}</h3>
+                  <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                    {resource.description}
+                  </p>
 
-      {filteredResources.length === 0 && (
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <ResourceMeta icon={<MapPin size={14} />} label="Location" value={resource.location} />
+                    <ResourceMeta icon={<Users size={14} />} label="Capacity" value={`${resource.capacity}`} />
+                  </div>
+
+                  <div className="mb-6 flex-1 space-y-2">
+                    <div className="mt-6 rounded-2xl bg-muted/70 px-4 py-3 dark:bg-white/5">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">
+                        <Layers3 size={12} />
+                        Operational note
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {resource.bookingReady
+                          ? `Ready for request submission. Asset health score ${resource.healthScore}%.`
+                          : 'Currently unavailable while campus teams resolve a service or maintenance issue.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 border-t border-border pt-4">
+                    <Link to={`/bookings/new?resourceId=${resource.id}`} className="flex-1">
+                      <Button className="w-full gap-2" disabled={!resource.bookingReady}>
+                        Book Now <ArrowRight size={16} />
+                      </Button>
+                    </Link>
+                    <Button variant="outline" size="icon" aria-label={`View details for ${resource.name}`}>
+                      <Info size={18} />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {!loading && filteredResources.length === 0 && (
         <div className="py-20 text-center">
-          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 text-muted-foreground">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <Search size={32} />
           </div>
           <h3 className="text-xl font-bold">No resources found</h3>
@@ -170,11 +201,7 @@ const MetricCard = ({ label, value }) => (
   </Card>
 );
 
-const ResourceMeta = ({
-  icon,
-  label,
-  value,
-}) => (
+const ResourceMeta = ({ icon, label, value }) => (
   <div className="rounded-2xl border border-border bg-white/35 px-4 py-3 dark:bg-white/5">
     <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">
       {icon}

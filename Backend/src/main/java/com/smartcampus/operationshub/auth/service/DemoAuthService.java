@@ -1,0 +1,34 @@
+package com.smartcampus.operationshub.auth.service;
+
+import com.smartcampus.operationshub.auth.dto.DemoLoginRequest;
+import com.smartcampus.operationshub.auth.dto.DemoUserResponse;
+import java.util.List;
+import org.springframework.stereotype.Service;
+
+@Service
+public class DemoAuthService {
+
+    private final List<DemoAccount> accounts = List.of(
+            new DemoAccount("student-01", "Amaya Perera", "student@campus.edu", "ST2026001", "USER", "Student / Staff", "Student@123"),
+            new DemoAccount("admin-1", "Operations Admin", "admin@campus.edu", "AD2026001", "ADMIN", "Operations Admin", "Admin@123"),
+            new DemoAccount("tech-17", "Kasun Silva", "tech@campus.edu", "TE2026001", "TECHNICIAN", "Technician", "Tech@123")
+    );
+
+    public List<DemoUserResponse> getDemoUsers() {
+        return accounts.stream().map(DemoAccount::toResponse).toList();
+    }
+
+    public DemoUserResponse login(DemoLoginRequest request) {
+        return accounts.stream()
+                .filter(account -> account.email().equalsIgnoreCase(request.email()) && account.password().equals(request.password()))
+                .findFirst()
+                .map(DemoAccount::toResponse)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid demo email or password."));
+    }
+
+    private record DemoAccount(String id, String name, String email, String campusId, String role, String title, String password) {
+        private DemoUserResponse toResponse() {
+            return new DemoUserResponse(id, name, email, campusId, role, title);
+        }
+    }
+}

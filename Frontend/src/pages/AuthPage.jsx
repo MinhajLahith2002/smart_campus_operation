@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -14,6 +14,8 @@ import {
 import { Button, Card, Badge, Input } from '../components/ui/Primitives';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { getRoleCredentials } from '../lib/authDefaults';
+import { demoLogin, getDemoUsers } from '../lib/operationsApi';
 import { cn } from '../lib/utils';
 
 const roleOptions = [
@@ -47,31 +49,88 @@ export const AuthPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedRole = searchParams.get('role');
-  const { login } = useAuth();
+  const { setAuthenticatedUser } = useAuth();
   const { theme, setTheme } = useTheme();
   const [selectedRole, setSelectedRole] = useState(
     roleOptions.some((item) => item.role === requestedRole) ? requestedRole : 'USER'
   );
+  const [demoUsers, setDemoUsers] = useState([]);
   const [form, setForm] = useState({
     email: '',
     campusId: '',
+    password: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    getDemoUsers()
+      .then((users) => {
+        if (active) setDemoUsers(users);
+      })
+      .catch(() => {
+        if (active) setDemoUsers([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const activeRole = useMemo(
     () => roleOptions.find((item) => item.role === selectedRole) ?? roleOptions[0],
     [selectedRole]
   );
 
-  const handleGoogleSignIn = (event) => {
+  const activeDemoUser = useMemo(
+    () => demoUsers.find((item) => item.role === selectedRole),
+    [demoUsers, selectedRole]
+  );
+
+  useEffect(() => {
+    const fallback = getRoleCredentials(selectedRole);
+    setForm({
+      email: activeDemoUser?.email || fallback.email,
+      campusId: activeDemoUser?.campusId || fallback.campusId,
+      password: fallback.password,
+    });
+    setError('');
+  }, [selectedRole, activeDemoUser]);
+
+  const handleDemoFill = () => {
+    const fallback = getRoleCredentials(selectedRole);
+    setForm({
+      email: activeDemoUser?.email || fallback.email,
+      campusId: activeDemoUser?.campusId || fallback.campusId,
+      password: fallback.password,
+    });
+  };
+
+  const handleGoogleSignIn = async (event) => {
     event.preventDefault();
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      login(selectedRole, {
-        email: form.email,
+    setError('');
+
+    try {
+      const account = await demoLogin({
+        email: form.email.trim(),
+        password: form.password,
       });
+
+      if (account.role !== selectedRole) {
+        throw new Error(`This account belongs to ${account.title}. Switch the selected role before signing in.`);
+      }
+      if (form.campusId.trim() && account.campusId !== form.campusId.trim()) {
+        throw new Error('Campus ID does not match the selected demo account.');
+      }
+
+      setAuthenticatedUser(account);
       navigate('/dashboard');
-    }, 700);
+    } catch (err) {
+      setError(err.message || 'Unable to sign in with the demo backend account.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -182,6 +241,16 @@ export const AuthPage = () => {
                     required
                   />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold">Password</label>
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    value={form.password}
+                    onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                    required
+                  />
+                </div>
 
                 <div className="rounded-2xl border border-border bg-white/50 px-4 py-4 dark:bg-white/5">
                   <div className="flex items-start gap-3">
@@ -191,9 +260,21 @@ export const AuthPage = () => {
                     <div>
                       <p className="text-sm font-semibold">Google campus identity</p>
                       <p className="mt-1 text-sm leading-7 text-muted-foreground">
-                        Version 1 now presents sign-in as a Google-based campus access flow. Users still choose the correct role first, then continue with Google into the matching workspace permissions.
+                        This demo build now validates against the backend auth module. Use the role-matched demo account below to enter the right workspace with backend-backed identity data.
                       </p>
                     </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-muted/60 px-4 py-4 dark:bg-white/5">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm font-semibold">Demo credentials</p>
+                    <Button type="button" variant="outline" size="sm" onClick={handleDemoFill}>Use defaults</Button>
+                  </div>
+                  <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                    <p>Email: <span className="font-semibold text-foreground">{activeDemoUser?.email || getRoleCredentials(selectedRole).email}</span></p>
+                    <p>Campus ID: <span className="font-semibold text-foreground">{activeDemoUser?.campusId || getRoleCredentials(selectedRole).campusId}</span></p>
+                    <p>Password: <span className="font-semibold text-foreground">{getRoleCredentials(selectedRole).password}</span></p>
                   </div>
                 </div>
 
@@ -208,6 +289,8 @@ export const AuthPage = () => {
                     ))}
                   </ul>
                 </div>
+
+                {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
 
                 <Button type="submit" className="w-full gap-2" size="lg" isLoading={isSubmitting}>
                   <GoogleMark />
