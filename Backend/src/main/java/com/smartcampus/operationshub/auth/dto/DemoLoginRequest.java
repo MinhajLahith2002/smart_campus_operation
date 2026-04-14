@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 
 public record DemoLoginRequest(
         @NotBlank @Email String email,
-        @NotBlank String password
+        @NotBlank String campusId,
+        @NotBlank String password,
+        @NotBlank String role
 ) {
 }

@@ -64,6 +64,12 @@ export const AuthPage = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (roleOptions.some((item) => item.role === requestedRole)) {
+      setSelectedRole(requestedRole);
+    }
+  }, [requestedRole]);
+
+  useEffect(() => {
     let active = true;
     getDemoUsers()
       .then((users) => {
@@ -111,18 +117,23 @@ export const AuthPage = () => {
     setIsSubmitting(true);
     setError('');
 
+    const expectedEmail = (activeDemoUser?.email || getRoleCredentials(selectedRole).email).toLowerCase();
+    const expectedCampusId = (activeDemoUser?.campusId || getRoleCredentials(selectedRole).campusId).toLowerCase();
+
     try {
+      if (form.email.trim().toLowerCase() !== expectedEmail) {
+        throw new Error(`Use the ${activeRole.title} email for this login. Expected ${expectedEmail}.`);
+      }
+      if (form.campusId.trim().toLowerCase() !== expectedCampusId) {
+        throw new Error(`Use the ${activeRole.title} campus ID for this login. Expected ${activeDemoUser?.campusId || getRoleCredentials(selectedRole).campusId}.`);
+      }
+
       const account = await demoLogin({
         email: form.email.trim(),
+        campusId: form.campusId.trim(),
         password: form.password,
+        role: selectedRole,
       });
-
-      if (account.role !== selectedRole) {
-        throw new Error(`This account belongs to ${account.title}. Switch the selected role before signing in.`);
-      }
-      if (form.campusId.trim() && account.campusId !== form.campusId.trim()) {
-        throw new Error('Campus ID does not match the selected demo account.');
-      }
 
       setAuthenticatedUser(account);
       navigate('/dashboard');
@@ -260,7 +271,7 @@ export const AuthPage = () => {
                     <div>
                       <p className="text-sm font-semibold">Google campus identity</p>
                       <p className="mt-1 text-sm leading-7 text-muted-foreground">
-                        This demo build now validates against the backend auth module. Use the role-matched demo account below to enter the right workspace with backend-backed identity data.
+                        This demo build now validates against the backend auth module. The selected role, email, campus ID, and password must all match the same role account.
                       </p>
                     </div>
                   </div>

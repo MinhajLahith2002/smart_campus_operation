@@ -20,10 +20,13 @@ public class DemoAuthService {
 
     public DemoUserResponse login(DemoLoginRequest request) {
         return accounts.stream()
-                .filter(account -> account.email().equalsIgnoreCase(request.email()) && account.password().equals(request.password()))
+                .filter(account -> account.role().equalsIgnoreCase(request.role().trim()))
+                .filter(account -> account.email().equalsIgnoreCase(request.email().trim()))
+                .filter(account -> account.campusId().equalsIgnoreCase(request.campusId().trim()))
+                .filter(account -> account.password().equals(request.password()))
                 .findFirst()
                 .map(DemoAccount::toResponse)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid demo email or password."));
+                .orElseThrow(() -> new IllegalArgumentException("Use the correct role email, campus ID, and password for the selected role."));
     }
 
     private record DemoAccount(String id, String name, String email, String campusId, String role, String title, String password) {
