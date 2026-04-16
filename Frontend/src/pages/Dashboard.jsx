@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Card, Button, Badge } from '../components/ui/Primitives';
 import { MOCK_BOOKINGS, MOCK_RESOURCES, MOCK_TICKETS } from '../mockData';
+import { getResources } from '../lib/moduleAApi';
 import { getTicketSummary, getTickets } from '../lib/moduleCApi';
 import { cn } from '../lib/utils';
 
@@ -28,6 +29,7 @@ export const Dashboard = () => {
   const firstName = user?.name.split(' ')[0] ?? 'Operator';
   const [incidentSummary, setIncidentSummary] = useState(null);
   const [incidentTickets, setIncidentTickets] = useState([]);
+  const [resources, setResources] = useState([]);
 
   useEffect(() => {
     let ignore = false;
@@ -52,8 +54,29 @@ export const Dashboard = () => {
     return () => { ignore = true; };
   }, [user, isTechnician]);
 
+  useEffect(() => {
+    let ignore = false;
+
+    const loadResources = async () => {
+      try {
+        const data = await getResources();
+        if (!ignore) setResources(data);
+      } catch (_) {
+        if (!ignore) setResources([]);
+      }
+    };
+
+    loadResources();
+    return () => { ignore = true; };
+  }, []);
+
   const approvedBookings = MOCK_BOOKINGS.filter((booking) => booking.status === 'APPROVED').length;
-  const activeResources = MOCK_RESOURCES.filter((resource) => resource.status === 'ACTIVE').length;
+  const resourceSource = resources.length ? resources : MOCK_RESOURCES;
+  const resourceLookup = useMemo(
+    () => new Map(resourceSource.map((resource) => [String(resource.id), resource])),
+    [resourceSource]
+  );
+  const activeResources = resourceSource.filter((resource) => resource.status === 'ACTIVE').length;
   const openTickets = incidentSummary?.open ?? MOCK_TICKETS.filter((ticket) => ticket.status !== 'CLOSED').length;
   const roleTicketRoute = isAdmin ? '/admin/tickets' : isTechnician ? '/tickets/assigned' : '/tickets/my';
   const incidentQueue = incidentTickets.length ? incidentTickets : MOCK_TICKETS;
@@ -95,7 +118,7 @@ export const Dashboard = () => {
             <div className="mt-6 grid grid-cols-2 gap-4">
               <SignalPanel label="Active bookings" value={`${approvedBookings}`} accent="text-emerald-300" />
               <SignalPanel label={isTechnician ? 'Assigned incidents' : 'Open incidents'} value={`${isTechnician ? incidentQueue.length : openTickets}`} accent="text-amber-300" />
-              <SignalPanel label="Assets online" value={`${activeResources}/${MOCK_RESOURCES.length}`} accent="text-cyan-300" />
+              <SignalPanel label="Assets online" value={`${activeResources}/${resourceSource.length}`} accent="text-cyan-300" />
               <SignalPanel label="Priority alerts" value={`${incidentSummary?.highOrCritical ?? 1}`} accent="text-violet-300" />
             </div>
           </div>
@@ -114,7 +137,7 @@ export const Dashboard = () => {
           <SectionHeader title="Upcoming bookings" to="/bookings/my" />
           <div className="space-y-3">
             {MOCK_BOOKINGS.map((booking) => {
-              const resource = MOCK_RESOURCES.find((item) => item.id === booking.resourceId);
+              const resource = resourceLookup.get(String(booking.resourceId));
               return (
                 <Card key={booking.id} className="group bg-white/70 p-5 dark:bg-white/5">
                   <div className="flex items-start justify-between gap-4">

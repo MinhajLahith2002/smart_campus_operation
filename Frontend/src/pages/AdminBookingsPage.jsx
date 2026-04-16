@@ -1,11 +1,33 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { CalendarClock, CheckCircle2, CircleOff, Layers3, MapPin, Users } from 'lucide-react';
 import { Card, Badge, Button } from '../components/ui/Primitives';
 import { MOCK_BOOKINGS, MOCK_RESOURCES } from '../mockData';
+import { getResources } from '../lib/moduleAApi';
 
 export const AdminBookingsPage = () => {
+  const [resources, setResources] = useState([]);
   const pendingBookings = MOCK_BOOKINGS.filter((item) => item.status === 'PENDING');
+  const resourceLookup = useMemo(
+    () => new Map((resources.length ? resources : MOCK_RESOURCES).map((resource) => [String(resource.id), resource])),
+    [resources]
+  );
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadResources = async () => {
+      try {
+        const data = await getResources();
+        if (!ignore) setResources(data);
+      } catch (_) {
+        if (!ignore) setResources([]);
+      }
+    };
+
+    loadResources();
+    return () => { ignore = true; };
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -34,7 +56,7 @@ export const AdminBookingsPage = () => {
 
         <div className="space-y-3">
           {MOCK_BOOKINGS.map((booking) => {
-            const resource = MOCK_RESOURCES.find((item) => item.id === booking.resourceId);
+            const resource = resourceLookup.get(String(booking.resourceId));
             const isPending = booking.status === 'PENDING';
 
             return (

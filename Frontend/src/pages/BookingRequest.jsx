@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { MOCK_RESOURCES } from '../mockData';
 import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Calendar, Clock, Users, Info, ArrowLeft, CheckCircle2, MapPin, ShieldCheck, ClipboardList, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
+import { formatAvailabilityWindow, getResource } from '../lib/moduleAApi';
 
 export const BookingRequest = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const resourceId = searchParams.get('resourceId');
-  const resource = MOCK_RESOURCES.find(r => r.id === resourceId);
+  const fallbackResource = useMemo(() => MOCK_RESOURCES.find((resource) => String(resource.id) === String(resourceId)), [resourceId]);
+  const [resource, setResource] = useState(fallbackResource || null);
+  const [loadError, setLoadError] = useState('');
 
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -22,10 +25,31 @@ export const BookingRequest = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  useEffect(() => {
+    let ignore = false;
+
+    const loadResource = async () => {
+      if (!resourceId) return;
+      try {
+        const data = await getResource(resourceId);
+        if (!ignore) setResource(data);
+      } catch (err) {
+        if (!ignore) {
+          setResource(fallbackResource || null);
+          setLoadError(err.message || 'Unable to refresh resource details.');
+        }
+      }
+    };
+
+    loadResource();
+    return () => { ignore = true; };
+  }, [fallbackResource, resourceId]);
+
   if (!resource) {
     return (
       <div className="text-center py-20">
         <h2 className="text-2xl font-bold">Resource not found</h2>
+        {loadError && <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>}
         <Button variant="ghost" onClick={() => navigate('/catalogue')} className="mt-4">
           Back to Catalogue
         </Button>
@@ -86,10 +110,11 @@ export const BookingRequest = () => {
           <div className="rounded-[28px] border border-border bg-slate-950 p-5 text-white">
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Resource snapshot</p>
             <h2 className="mt-2 text-2xl font-semibold">{resource.name}</h2>
+            {loadError && <p className="mt-3 text-xs text-slate-300">{loadError}</p>}
             <div className="mt-5 grid gap-3">
               <InlineMetric icon={<MapPin size={14} />} label="Location" value={resource.location} />
               <InlineMetric icon={<Users size={14} />} label="Capacity" value={`${resource.capacity} attendees`} />
-              <InlineMetric icon={<Clock size={14} />} label="Available window" value={`${resource.availableFrom} - ${resource.availableTo}`} />
+              <InlineMetric icon={<Clock size={14} />} label="Available window" value={formatAvailabilityWindow(resource.availabilityWindow)} />
             </div>
           </div>
         </div>
@@ -198,7 +223,7 @@ export const BookingRequest = () => {
                   <Users size={16} /> Max Capacity: {resource.capacity}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock size={16} /> Available: {resource.availableFrom} - {resource.availableTo}
+                  <Clock size={16} /> Available: {formatAvailabilityWindow(resource.availabilityWindow)}
                 </div>
               </div>
             </div>

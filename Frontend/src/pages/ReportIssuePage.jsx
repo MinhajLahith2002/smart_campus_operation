@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MOCK_RESOURCES } from '../mockData';
 import { Button, Card, Input, Badge } from '../components/ui/Primitives';
@@ -15,6 +15,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { createTicket, toBackendRole } from '../lib/moduleCApi';
+import { getResources } from '../lib/moduleAApi';
 import { useAuth } from '../context/AuthContext';
 
 const categories = ['EQUIPMENT', 'FACILITY', 'NETWORK', 'SAFETY', 'OTHER'];
@@ -23,6 +24,7 @@ const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 export const ReportIssuePage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [resources, setResources] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -37,10 +39,35 @@ export const ReportIssuePage = () => {
     evidenceReference: '',
   });
 
-  const selectedResource = MOCK_RESOURCES.find((resource) => resource.id === formData.resourceId);
+  const resourceOptions = useMemo(() => (resources.length ? resources : MOCK_RESOURCES), [resources]);
+  const selectedResource = resourceOptions.find((resource) => String(resource.id) === String(formData.resourceId));
   const evidenceItems = formData.evidenceReference.split(',').map((item) => item.trim()).filter(Boolean);
 
   const handleChange = (field, value) => setFormData((current) => ({ ...current, [field]: value }));
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadResources = async () => {
+      try {
+        const data = await getResources();
+        if (!ignore) setResources(data);
+      } catch (_) {
+        if (!ignore) setResources([]);
+      }
+    };
+
+    loadResources();
+    return () => { ignore = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!resourceOptions.length) return;
+    const hasCurrentResource = resourceOptions.some((resource) => String(resource.id) === String(formData.resourceId));
+    if (!hasCurrentResource) {
+      setFormData((current) => ({ ...current, resourceId: resourceOptions[0].id }));
+    }
+  }, [formData.resourceId, resourceOptions]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -142,7 +169,7 @@ export const ReportIssuePage = () => {
                 <label className="space-y-2 text-sm font-semibold">
                   <span>Affected resource</span>
                   <select className="flex h-11 w-full rounded-xl border border-border bg-white/45 px-3 py-2 text-sm dark:bg-white/5" value={formData.resourceId} onChange={(event) => handleChange('resourceId', event.target.value)}>
-                    {MOCK_RESOURCES.map((resource) => <option key={resource.id} value={resource.id}>{resource.name}</option>)}
+                    {resourceOptions.map((resource) => <option key={resource.id} value={resource.id}>{resource.name}</option>)}
                   </select>
                 </label>
                 <label className="space-y-2 text-sm font-semibold">
