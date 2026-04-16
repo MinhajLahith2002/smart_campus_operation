@@ -47,8 +47,8 @@ const accessModes = [
 export const LandingPage = () => {
   const navigate = useNavigate();
 
-  const handleLogin = (role) => {
-    navigate(`/auth?role=${role}`);
+  const handleLogin = () => {
+    navigate('/auth');
   };
 
   return (
@@ -89,14 +89,14 @@ export const LandingPage = () => {
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Button size="lg" className="gap-2" onClick={() => handleLogin('USER')}>
+                <Button size="lg" className="gap-2" onClick={handleLogin}>
                   Go to student or staff sign-in
                   <ArrowRight size={18} />
                 </Button>
-                <Button variant="outline" size="lg" onClick={() => handleLogin('ADMIN')}>
+                <Button variant="outline" size="lg" onClick={handleLogin}>
                   Go to admin sign-in
                 </Button>
-                <Button variant="ghost" size="lg" onClick={() => handleLogin('TECHNICIAN')}>
+                <Button variant="ghost" size="lg" onClick={handleLogin}>
                   Go to technician sign-in
                 </Button>
               </div>
@@ -208,7 +208,7 @@ export const LandingPage = () => {
             {accessModes.map((mode) => (
               <button
                 key={mode.role}
-                onClick={() => handleLogin(mode.role)}
+                onClick={handleLogin}
                 className="premium-card flex items-start justify-between gap-4 p-6 text-left hover:-translate-y-0.5"
               >
                 <div>
