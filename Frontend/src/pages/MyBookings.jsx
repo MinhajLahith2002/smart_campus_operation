@@ -1,14 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MOCK_BOOKINGS, MOCK_RESOURCES } from '../mockData';
 import { Card, Badge, Button } from '../components/ui/Primitives';
 import { Calendar, Clock, MapPin, XCircle, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
+import { getResources } from '../lib/moduleAApi';
 
 export const MyBookings = () => {
   const [filter, setFilter] = useState('ALL');
+  const [resources, setResources] = useState([]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadResources = async () => {
+      try {
+        const data = await getResources();
+        if (!ignore) setResources(data);
+      } catch (_) {
+        if (!ignore) setResources([]);
+      }
+    };
+
+    loadResources();
+    return () => { ignore = true; };
+  }, []);
 
   const filteredBookings = MOCK_BOOKINGS.filter(b => filter === 'ALL' || b.status === filter);
+  const resourceLookup = useMemo(
+    () => new Map((resources.length ? resources : MOCK_RESOURCES).map((resource) => [String(resource.id), resource])),
+    [resources]
+  );
 
   return (
     <div className="space-y-8">
@@ -37,7 +59,7 @@ export const MyBookings = () => {
 
       <div className="space-y-4">
         {filteredBookings.map((booking) => {
-          const resource = MOCK_RESOURCES.find(r => r.id === booking.resourceId);
+          const resource = resourceLookup.get(String(booking.resourceId));
           return (
             <Card key={booking.id} className="p-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

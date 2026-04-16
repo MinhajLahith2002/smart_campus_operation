@@ -14,8 +14,10 @@ const AuthPage = lazy(() => import('./pages/AuthPage').then((module) => ({ defau
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })));
 const AdminBookingsPage = lazy(() => import('./pages/AdminBookingsPage').then((module) => ({ default: module.AdminBookingsPage })));
 const AdminTicketsPage = lazy(() => import('./pages/AdminTicketsPage').then((module) => ({ default: module.AdminTicketsPage })));
+const AdminResourcesPage = lazy(() => import('./pages/AdminResourcesPage').then((module) => ({ default: module.AdminResourcesPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 const ReportIssuePage = lazy(() => import('./pages/ReportIssuePage').then((module) => ({ default: module.ReportIssuePage })));
+const ResourceDetailPage = lazy(() => import('./pages/ResourceDetailPage').then((module) => ({ default: module.ResourceDetailPage })));
 const TicketDetailPage = lazy(() => import('./pages/TicketDetailPage').then((module) => ({ default: module.TicketDetailPage })));
 const TechnicianTicketsPage = lazy(() => import('./pages/TechnicianTicketsPage').then((module) => ({ default: module.TechnicianTicketsPage })));
 const RegisterPage = lazy(() => import('./pages/RegisterPage').then((module) => ({ default: module.RegisterPage })));
@@ -77,6 +79,7 @@ export default function App() {
 
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/catalogue" element={<ProtectedRoute><Catalogue /></ProtectedRoute>} />
+              <Route path="/catalogue/:resourceId" element={<ProtectedRoute><ResourceDetailPage /></ProtectedRoute>} />
               <Route path="/bookings/my" element={<ProtectedRoute><MyBookings /></ProtectedRoute>} />
               <Route path="/bookings/new" element={<ProtectedRoute><BookingRequest /></ProtectedRoute>} />
 
@@ -88,6 +91,7 @@ export default function App() {
 
               <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
               <Route path="/admin/bookings" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminBookingsPage /></RoleRoute></ProtectedRoute>} />
+              <Route path="/admin/resources" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminResourcesPage /></RoleRoute></ProtectedRoute>} />
               <Route path="/admin/tickets" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminTicketsPage /></RoleRoute></ProtectedRoute>} />
               <Route path="/admin/users" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminUsersPage /></RoleRoute></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

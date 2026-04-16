@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Bell,
+  Building2,
   CalendarRange,
   ChevronLeft,
   ChevronRight,
@@ -85,6 +86,7 @@ export const AppShell = ({ children }) => {
 
   const adminItems = user?.role === 'ADMIN'
     ? [
+        { to: '/admin/resources', icon: Building2, label: 'Resource Desk', hint: 'Facilities and assets' },
         { to: '/admin/bookings', icon: ShieldCheck, label: 'Booking Desk', hint: 'Operational queue' },
         { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Assign and triage' },
         { to: '/admin/users', icon: UserCog, label: 'User Access', hint: 'Roles, status, invites' },
