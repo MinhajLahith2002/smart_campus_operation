@@ -19,6 +19,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,7 @@ public class BookingService {
     @Transactional(readOnly = true)
     public List<BookingResponse> getBookings(BookingQuery query) {
         UserRole requesterRole = UserRole.valueOf(query.requesterRole().toUpperCase());
+        validateBookingAccessRole(requesterRole);
         return bookingRecordRepository.findAll().stream()
                 .filter(booking -> requesterRole == UserRole.ADMIN || (query.requesterId() != null && query.requesterId().equals(booking.getRequesterId())))
                 .filter(booking -> query.status() == null || query.status().isBlank() || "ALL".equalsIgnoreCase(query.status()) || booking.getStatus().name().equalsIgnoreCase(query.status()))
@@ -53,21 +55,11 @@ public class BookingService {
         ResourceAsset resource = resourceAssetRepository.findById(request.resourceId())
                 .orElseThrow(() -> new EntityNotFoundException("Resource " + request.resourceId() + " was not found."));
 
-        validateBookingRequest(request, resource);
+        validateBookingRequesterRole(request.requesterRole());
+        validateBookingRequest(request, resource, null);
 
         BookingRecord booking = new BookingRecord();
-        booking.setResourceId(resource.getId());
-        booking.setResourceName(resource.getName());
-        booking.setResourceLocation(resource.getLocation());
-        booking.setRequesterId(request.requesterId().trim());
-        booking.setRequesterName(request.requesterName().trim());
-        booking.setRequesterEmail(request.requesterEmail().trim());
-        booking.setRequesterRole(request.requesterRole());
-        booking.setBookingDate(request.date());
-        booking.setStartTime(request.startTime());
-        booking.setEndTime(request.endTime());
-        booking.setPurpose(request.purpose().trim());
-        booking.setAttendees(request.attendees());
+        applyBookingRequest(booking, request, resource);
         booking.setStatus(BookingStatus.PENDING);
         booking.setCreatedAt(OffsetDateTime.now());
         booking.setUpdatedAt(booking.getCreatedAt());
@@ -84,7 +76,37 @@ public class BookingService {
         return map(saved);
     }
 
-    public BookingResponse approveBooking(Long bookingId, BookingDecisionRequest request) {
+    public BookingResponse updateBooking(@NonNull Long bookingId, CreateBookingRequest request) {
+        BookingRecord booking = findBooking(bookingId);
+        if (booking.getStatus() != BookingStatus.PENDING) {
+            throw new IllegalArgumentException("Only pending bookings can be edited before admin review.");
+        }
+        if (request.requesterRole() != booking.getRequesterRole() || !booking.getRequesterId().equals(request.requesterId())) {
+            throw new SecurityException("Only the original requester can edit this pending booking.");
+        }
+
+        ResourceAsset resource = resourceAssetRepository.findById(request.resourceId())
+                .orElseThrow(() -> new EntityNotFoundException("Resource " + request.resourceId() + " was not found."));
+        validateBookingRequest(request, resource, bookingId);
+
+        applyBookingRequest(booking, request, resource);
+        booking.setUpdatedAt(OffsetDateTime.now());
+        booking.setCancellationRequestNote(null);
+        booking.setCancellationRequestedAt(null);
+
+        BookingRecord saved = bookingRecordRepository.save(booking);
+        notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
+                "Booking Request Updated",
+                "Your pending booking for " + saved.getResourceName() + " was updated before admin review.",
+                String.valueOf(saved.getId()));
+        notificationService.publish(null, UserRole.ADMIN.name(), NotificationType.BOOKING_STATUS,
+                "Booking Request Updated",
+                saved.getRequesterName() + " updated the pending booking for " + saved.getResourceName() + ".",
+                String.valueOf(saved.getId()));
+        return map(saved);
+    }
+
+    public BookingResponse approveBooking(@NonNull Long bookingId, BookingDecisionRequest request) {
         BookingRecord booking = findBooking(bookingId);
         ensureAdmin(request.actorRole());
         if (booking.getStatus() != BookingStatus.PENDING) {
@@ -93,6 +115,8 @@ public class BookingService {
         ensureNoApprovedConflict(booking, bookingId);
         booking.setStatus(BookingStatus.APPROVED);
         booking.setRejectionReason(null);
+        booking.setCancellationRequestNote(null);
+        booking.setCancellationRequestedAt(null);
         booking.setUpdatedAt(OffsetDateTime.now());
         BookingRecord saved = bookingRecordRepository.save(booking);
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
@@ -102,7 +126,7 @@ public class BookingService {
         return map(saved);
     }
 
-    public BookingResponse rejectBooking(Long bookingId, BookingDecisionRequest request) {
+    public BookingResponse rejectBooking(@NonNull Long bookingId, BookingDecisionRequest request) {
         BookingRecord booking = findBooking(bookingId);
         ensureAdmin(request.actorRole());
         if (booking.getStatus() != BookingStatus.PENDING) {
@@ -113,6 +137,8 @@ public class BookingService {
         }
         booking.setStatus(BookingStatus.REJECTED);
         booking.setRejectionReason(request.note().trim());
+        booking.setCancellationRequestNote(null);
+        booking.setCancellationRequestedAt(null);
         booking.setUpdatedAt(OffsetDateTime.now());
         BookingRecord saved = bookingRecordRepository.save(booking);
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
@@ -122,20 +148,56 @@ public class BookingService {
         return map(saved);
     }
 
-    public BookingResponse cancelBooking(Long bookingId, BookingDecisionRequest request) {
+    public BookingResponse cancelBooking(@NonNull Long bookingId, BookingDecisionRequest request) {
         BookingRecord booking = findBooking(bookingId);
         if (request.actorRole() != UserRole.ADMIN && !booking.getRequesterId().equals(request.actorId())) {
             throw new SecurityException("Only the requester or an admin can cancel this booking.");
         }
-        if (booking.getStatus() != BookingStatus.PENDING) {
-            throw new IllegalArgumentException("Only pending bookings can be cancelled in this demo workflow.");
+
+        if (request.actorRole() == UserRole.ADMIN) {
+            if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.APPROVED) {
+                throw new IllegalArgumentException("Admins can only cancel pending or approved bookings.");
+            }
+        } else if (booking.getStatus() != BookingStatus.PENDING) {
+            throw new IllegalArgumentException("Only pending bookings can be cancelled directly by the requester.");
         }
+
         booking.setStatus(BookingStatus.CANCELLED);
         booking.setUpdatedAt(OffsetDateTime.now());
+        booking.setCancellationRequestNote(null);
+        booking.setCancellationRequestedAt(null);
         BookingRecord saved = bookingRecordRepository.save(booking);
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
                 "Booking Cancelled",
                 "The booking request for " + saved.getResourceName() + " has been cancelled.",
+                String.valueOf(saved.getId()));
+        return map(saved);
+    }
+
+    public BookingResponse requestCancellation(@NonNull Long bookingId, BookingDecisionRequest request) {
+        BookingRecord booking = findBooking(bookingId);
+        if (!booking.getRequesterId().equals(request.actorId()) || request.actorRole() != booking.getRequesterRole()) {
+            throw new SecurityException("Only the original requester can ask admin to cancel an approved booking.");
+        }
+        if (booking.getStatus() != BookingStatus.APPROVED) {
+            throw new IllegalArgumentException("Only approved bookings can send an admin cancellation request.");
+        }
+        if (request.note() == null || request.note().trim().length() < 8) {
+            throw new IllegalArgumentException("A clear cancellation request message is required.");
+        }
+
+        booking.setCancellationRequestNote(request.note().trim());
+        booking.setCancellationRequestedAt(OffsetDateTime.now());
+        booking.setUpdatedAt(booking.getCancellationRequestedAt());
+        BookingRecord saved = bookingRecordRepository.save(booking);
+
+        notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
+                "Cancellation Request Sent",
+                "Your cancellation request for " + saved.getResourceName() + " was sent to admin review.",
+                String.valueOf(saved.getId()));
+        notificationService.publish(null, UserRole.ADMIN.name(), NotificationType.BOOKING_STATUS,
+                "Approved Booking Needs Cancellation Review",
+                saved.getRequesterName() + " requested admin cancellation for " + saved.getResourceName() + ": " + saved.getCancellationRequestNote(),
                 String.valueOf(saved.getId()));
         return map(saved);
     }
@@ -151,12 +213,29 @@ public class BookingService {
         );
     }
 
-    private BookingRecord findBooking(Long bookingId) {
+    @Transactional(readOnly = true)
+    public BookingResponse getBookingResponse(@NonNull Long bookingId) {
+        return map(findBooking(bookingId));
+    }
+
+    private BookingRecord findBooking(@NonNull Long bookingId) {
         return bookingRecordRepository.findById(bookingId)
                 .orElseThrow(() -> new EntityNotFoundException("Booking " + bookingId + " was not found."));
     }
 
-    private void validateBookingRequest(CreateBookingRequest request, ResourceAsset resource) {
+    private void validateBookingRequesterRole(UserRole requesterRole) {
+        if (requesterRole != UserRole.STUDENT && requesterRole != UserRole.STAFF) {
+            throw new SecurityException("Only student or staff requester accounts can create booking requests.");
+        }
+    }
+
+    private void validateBookingAccessRole(UserRole requesterRole) {
+        if (requesterRole == UserRole.TECHNICIAN) {
+            throw new SecurityException("Technician accounts do not have access to the booking module.");
+        }
+    }
+
+    private void validateBookingRequest(CreateBookingRequest request, ResourceAsset resource, Long bookingId) {
         if (request.endTime().isBefore(request.startTime()) || request.endTime().equals(request.startTime())) {
             throw new IllegalArgumentException("End time must be after start time.");
         }
@@ -169,14 +248,14 @@ public class BookingService {
         if (request.startTime().isBefore(resource.getAvailableFrom()) || request.endTime().isAfter(resource.getAvailableTo())) {
             throw new IllegalArgumentException("Booking must fit within the resource availability window.");
         }
-        ensureNoApprovedConflict(request.resourceId(), request.date(), request.startTime(), request.endTime(), null);
+        ensureNoApprovedConflict(request.resourceId(), request.date(), request.startTime(), request.endTime(), bookingId);
     }
 
     private void ensureNoApprovedConflict(BookingRecord booking, Long bookingId) {
         ensureNoApprovedConflict(booking.getResourceId(), booking.getBookingDate(), booking.getStartTime(), booking.getEndTime(), bookingId);
     }
 
-    private void ensureNoApprovedConflict(Long resourceId, java.time.LocalDate date, LocalTime startTime, LocalTime endTime, Long bookingId) {
+    private void ensureNoApprovedConflict(@NonNull Long resourceId, java.time.LocalDate date, LocalTime startTime, LocalTime endTime, Long bookingId) {
         boolean hasConflict = bookingRecordRepository.findByBookingDateAndResourceId(date, resourceId).stream()
                 .filter(existing -> bookingId == null || !existing.getId().equals(bookingId))
                 .filter(existing -> existing.getStatus() == BookingStatus.APPROVED)
@@ -190,6 +269,21 @@ public class BookingService {
         if (role != UserRole.ADMIN) {
             throw new SecurityException("Only admins can make this booking decision.");
         }
+    }
+
+    private void applyBookingRequest(BookingRecord booking, CreateBookingRequest request, ResourceAsset resource) {
+        booking.setResourceId(resource.getId());
+        booking.setResourceName(resource.getName());
+        booking.setResourceLocation(resource.getLocation());
+        booking.setRequesterId(request.requesterId().trim());
+        booking.setRequesterName(request.requesterName().trim());
+        booking.setRequesterEmail(request.requesterEmail().trim());
+        booking.setRequesterRole(request.requesterRole());
+        booking.setBookingDate(request.date());
+        booking.setStartTime(request.startTime());
+        booking.setEndTime(request.endTime());
+        booking.setPurpose(request.purpose().trim());
+        booking.setAttendees(request.attendees());
     }
 
     private BookingResponse map(BookingRecord booking) {
@@ -209,6 +303,8 @@ public class BookingService {
                 booking.getAttendees(),
                 booking.getStatus(),
                 booking.getRejectionReason(),
+                booking.getCancellationRequestNote(),
+                booking.getCancellationRequestedAt(),
                 booking.getCreatedAt(),
                 booking.getUpdatedAt()
         );

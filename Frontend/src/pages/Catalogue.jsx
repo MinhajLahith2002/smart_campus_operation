@@ -4,9 +4,12 @@ import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { getResources, getResourceSummary } from '../lib/operationsApi';
+import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 
 export const Catalogue = () => {
+  const { user } = useAuth();
+  const canRequestBooking = user?.role === 'USER';
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [resources, setResources] = useState([]);
@@ -162,11 +165,17 @@ export const Catalogue = () => {
                   </div>
 
                   <div className="flex items-center gap-2 border-t border-border pt-4">
-                    <Link to={`/bookings/new?resourceId=${resource.id}`} className="flex-1">
-                      <Button className="w-full gap-2" disabled={!resource.bookingReady}>
-                        Book Now <ArrowRight size={16} />
+                    {canRequestBooking ? (
+                      <Link to={`/bookings/new?resourceId=${resource.id}`} className="flex-1">
+                        <Button className="w-full gap-2" disabled={!resource.bookingReady}>
+                          Book Now <ArrowRight size={16} />
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Button className="flex-1 w-full gap-2" variant="outline" disabled>
+                        Booking available for student requester accounts
                       </Button>
-                    </Link>
+                    )}
                     <Button variant="outline" size="icon" aria-label={`View details for ${resource.name}`}>
                       <Info size={18} />
                     </Button>
@@ -210,3 +219,5 @@ const ResourceMeta = ({ icon, label, value }) => (
     <p className="mt-2 text-sm font-medium">{value}</p>
   </div>
 );
+
+

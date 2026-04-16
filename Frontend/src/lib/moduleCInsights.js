@@ -56,7 +56,7 @@ export const responseTargetFromPriority = (priority) => {
   }
 };
 
-export const completenessScore = ({ title = '', description = '', operationalImpact = '', preferredContact = '', evidenceItems = [] }) => {
+export const completenessScore = ({ title = '', description = '', operationalImpact = '', preferredContact = '', incidentLocation = '', evidenceItems = [] }) => {
   let score = 0;
   if (title.trim().length >= 8) score += 20;
   if (description.trim().length >= 30) score += 30;
@@ -66,18 +66,22 @@ export const completenessScore = ({ title = '', description = '', operationalImp
   return score;
 };
 
-export const validateTicketDraft = ({ title = '', description = '', operationalImpact = '', preferredContact = '', evidenceItems = [], priority = '', category = '' }) => {
+export const validateTicketDraft = ({ title = '', description = '', operationalImpact = '', preferredContact = '', incidentLocation = '', evidenceItems = [], priority = '', category = '' }) => {
   const errors = {};
   const trimmedTitle = title.trim();
   const trimmedDescription = description.trim();
   const trimmedImpact = operationalImpact.trim();
   const trimmedContact = preferredContact.trim();
+  const trimmedIncidentLocation = incidentLocation.trim();
 
   if (trimmedTitle.length < 8) errors.title = 'Use a clearer title with at least 8 characters.';
   if (trimmedDescription.length < 30) errors.description = 'Describe the issue in at least 30 characters so triage can act quickly.';
   if (trimmedImpact.length < 12) errors.operationalImpact = 'Explain the operational impact in at least 12 characters.';
   if (!trimmedContact || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedContact)) {
     errors.preferredContact = 'Enter a valid contact email.';
+  }
+  if (trimmedIncidentLocation.length < 6) {
+    errors.incidentLocation = 'Provide a clearer exact location for the technician.';
   }
   if (evidenceItems.length > 3) errors.evidenceReference = 'Only up to 3 evidence references are allowed.';
   if (new Set(evidenceItems.map((item) => item.toLowerCase())).size !== evidenceItems.length) {

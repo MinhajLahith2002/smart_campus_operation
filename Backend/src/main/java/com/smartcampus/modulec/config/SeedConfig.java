@@ -16,9 +16,23 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SeedConfig {
 
+    private static final String MAIN_AUDITORIUM_LOCATION = "Building B, Floor 1";
+
     @Bean
     CommandLineRunner seedModuleCData(TicketRepository ticketRepository) {
         return args -> {
+            ticketRepository.findAll().stream()
+                    .filter(ticket -> "Main Auditorium".equals(ticket.getResourceName()))
+                    .forEach(ticket -> {
+                        if (!MAIN_AUDITORIUM_LOCATION.equals(ticket.getResourceLocation())) {
+                            ticket.setResourceLocation(MAIN_AUDITORIUM_LOCATION);
+                        }
+                        if (ticket.getIncidentLocation() == null || ticket.getIncidentLocation().isBlank() || "Building A, Floor 1".equals(ticket.getIncidentLocation())) {
+                            ticket.setIncidentLocation(MAIN_AUDITORIUM_LOCATION);
+                        }
+                        ticketRepository.save(ticket);
+                    });
+
             if (ticketRepository.count() > 0) {
                 return;
             }
@@ -40,13 +54,13 @@ public class SeedConfig {
                     "Presentation sessions interrupted",
                     "Photo and short video captured during failure.",
                     "tech-17",
-                    "Nuwan Silva",
+                    "Kasun Silva",
                     "Lamp assembly diagnosed; replacement stock requested.");
             projector.getEvidenceItems().add(evidence(projector, "projector-front.jpg"));
             projector.getEvidenceItems().add(evidence(projector, "projector-lamp-video.mp4"));
             projector.getActivities().add(activity(projector, "Amaya Perera", UserRole.STUDENT, "TICKET_CREATED", "Issue reported with evidence references."));
-            projector.getActivities().add(activity(projector, "Operations Desk", UserRole.ADMIN, "TECHNICIAN_ASSIGNED", "Assigned to Nuwan Silva for equipment inspection."));
-            projector.getActivities().add(activity(projector, "Nuwan Silva", UserRole.TECHNICIAN, "STATUS_UPDATED", "Diagnosis started and temporary workaround failed."));
+            projector.getActivities().add(activity(projector, "Operations Desk", UserRole.ADMIN, "TECHNICIAN_ASSIGNED", "Assigned to Kasun Silva for equipment inspection."));
+            projector.getActivities().add(activity(projector, "Kasun Silva", UserRole.TECHNICIAN, "STATUS_UPDATED", "Diagnosis started and temporary workaround failed."));
 
             Ticket ac = buildTicket(
                     "AC instability in Robotics Lab",
@@ -81,7 +95,7 @@ public class SeedConfig {
                     "events@campus.edu",
                     UserRole.STAFF,
                     "Main Auditorium",
-                    "Building A, Floor 1",
+                    MAIN_AUDITORIUM_LOCATION,
                     "LECTURE_HALL",
                     "events@campus.edu",
                     "Large public events affected",
@@ -89,6 +103,7 @@ public class SeedConfig {
                     null,
                     null,
                     null);
+            network.setIncidentLocation(MAIN_AUDITORIUM_LOCATION);
             network.getEvidenceItems().add(evidence(network, "network-drop-log.txt"));
             network.getActivities().add(activity(network, "Campus Events Desk", UserRole.STAFF, "TICKET_CREATED", "High-impact event connectivity issue reported."));
             network.getActivities().add(activity(network, "Operations Desk", UserRole.ADMIN, "STATUS_UPDATED", "Ticket triaged as critical due to event impact."));
@@ -117,6 +132,7 @@ public class SeedConfig {
         ticket.setReporterRole(reporterRole);
         ticket.setResourceName(resourceName);
         ticket.setResourceLocation(resourceLocation);
+        ticket.setIncidentLocation(resourceLocation);
         ticket.setResourceType(resourceType);
         ticket.setPreferredContact(preferredContact);
         ticket.setOperationalImpact(operationalImpact);
@@ -143,7 +159,6 @@ public class SeedConfig {
         activity.setActorRole(actorRole);
         activity.setAction(action);
         activity.setDetail(detail);
-        activity.setCreatedAt(OffsetDateTime.now());
         return activity;
     }
 }

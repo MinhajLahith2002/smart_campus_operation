@@ -22,9 +22,11 @@ import {
   X,
 } from 'lucide-react';
 import { Badge, Button, Card } from '../components/ui/Primitives';
-import { addComment, assignTechnician, closeTicket, deleteComment, getTicket, reopenTicket, toBackendRole, updateComment, updateTicketStatus } from '../lib/moduleCApi';
+import { addComment, assignTechnician, closeTicket, deleteComment, deleteTicket, getTicket, reopenTicket, toBackendRole, updateComment, updateTicketStatus } from '../lib/moduleCApi';
+import { formatTicketStatusLabel, statusBadgeVariant } from '../lib/moduleCLabels';
 import { maintenanceHealth } from '../lib/moduleCInsights';
 import { useAuth } from '../context/AuthContext';
+import { getDemoUsers } from '../lib/operationsApi';
 
 export const TicketDetailPage = () => {
   const navigate = useNavigate();
@@ -38,12 +40,13 @@ export const TicketDetailPage = () => {
   const [commentDraft, setCommentDraft] = useState('');
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [lightboxItem, setLightboxItem] = useState(null);
+  const [technicians, setTechnicians] = useState([]);
 
   const loadTicket = async () => {
     try {
       setLoading(true);
       setError('');
-      const data = await getTicket(ticketId);
+      const data = await getTicket(ticketId, { role: user?.role, userId: user?.id });
       setTicket(data);
     } catch (err) {
       setError(err.message || 'Unable to load the ticket case file.');
@@ -52,7 +55,7 @@ export const TicketDetailPage = () => {
     }
   };
 
-  useEffect(() => { loadTicket(); }, [ticketId]);
+  useEffect(() => { if (user) loadTicket(); }, [ticketId, user]);
 
   const isReporter = ticket && user?.id === ticket.reporterId;
   const isAdmin = user?.role === 'ADMIN';
@@ -66,18 +69,58 @@ export const TicketDetailPage = () => {
 
   const timeline = useMemo(() => {
     if (!ticket) return [];
+
+    const steps = [
+      { key: 'OPEN', title: 'Open', owner: 'Operations Admin' },
+      { key: 'ASSIGNED', title: 'Assigned', owner: 'Operations Admin' },
+      { key: 'IN_PROGRESS', title: 'In Progress', owner: 'Technician' },
+      { key: 'RESOLVED', title: 'Resolved', owner: 'Technician' },
+      { key: 'CLOSED', title: 'Closed', owner: 'Student / Staff' },
+    ];
+
     if (ticket.status === 'REJECTED') {
       return [
-        { key: 'OPEN', title: 'Open', active: true },
-        { key: 'REJECTED', title: 'Rejected', active: true, danger: true },
+        { key: 'OPEN', title: 'Open', owner: 'Operations Admin', state: 'completed' },
+        { key: 'REJECTED', title: 'Rejected', owner: 'Operations Admin', state: 'current', danger: true },
       ];
     }
-    return [
-      { key: 'OPEN', title: 'Open', active: ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(ticket.status) },
-      { key: 'IN_PROGRESS', title: 'In Progress', active: ['IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(ticket.status) },
-      { key: 'RESOLVED', title: 'Resolved', active: ['RESOLVED', 'CLOSED'].includes(ticket.status) },
-      { key: 'CLOSED', title: 'Closed', active: ticket.status === 'CLOSED' },
-    ];
+
+    const stateMap = {
+      OPEN: {
+        OPEN: 'current',
+      },
+      TRIAGED: {
+        OPEN: 'current',
+      },
+      ASSIGNED: {
+        OPEN: 'completed',
+        ASSIGNED: 'current',
+      },
+      IN_PROGRESS: {
+        OPEN: 'completed',
+        ASSIGNED: 'completed',
+        IN_PROGRESS: 'current',
+      },
+      RESOLVED: {
+        OPEN: 'completed',
+        ASSIGNED: 'completed',
+        IN_PROGRESS: 'completed',
+        RESOLVED: 'current',
+      },
+      CLOSED: {
+        OPEN: 'completed',
+        ASSIGNED: 'completed',
+        IN_PROGRESS: 'completed',
+        RESOLVED: 'completed',
+        CLOSED: 'current',
+      },
+    };
+
+    const currentStates = stateMap[ticket.status] || stateMap.OPEN;
+    return steps.map((step) => ({
+      ...step,
+      state: currentStates[step.key] || 'pending',
+    }));
   }, [ticket]);
 
   const runAction = async (name, callback) => {
@@ -105,6 +148,22 @@ export const TicketDetailPage = () => {
     );
   }
 
+  const handleEditTicket = () => navigate(`/tickets/${ticket.id}/edit`);
+
+  const handleDeleteTicket = () => {
+    const confirmed = window.confirm('Delete this open ticket? This action cannot be undone.');
+    if (!confirmed) return;
+    runAction('delete-ticket', async () => {
+      await deleteTicket(ticket.id, {
+        actorId: user.id,
+        actorName: user.name,
+        actorRole: toBackendRole(user.role),
+        note: 'Reporter deleted the open ticket before workflow action began.',
+      });
+      navigate('/tickets/my');
+    });
+  };
+
   const handleConfirmFixed = () => runAction('close', () => closeTicket(ticket.id, {
     actorId: user.id,
     actorName: user.name,
@@ -131,6 +190,19 @@ export const TicketDetailPage = () => {
     actorRole: toBackendRole(user.role),
     detail: status === 'IN_PROGRESS' ? 'Technician began active work on this ticket.' : 'Technician marked the ticket resolved with a resolution note.',
   }));
+
+  const handleAdminReject = () => {
+    const detailNote = window.prompt('Rejection reason', ticket.rejectionReason || 'Admin rejected the ticket during desk triage.');
+    if (!detailNote) return;
+    runAction('reject', () => updateTicketStatus(ticket.id, {
+      status: 'REJECTED',
+      resolutionNotes: '',
+      actorId: user.id,
+      actorName: user.name,
+      actorRole: toBackendRole(user.role),
+      detail: detailNote,
+    }));
+  };
 
   const handleAdminAssign = () => {
     const technicianId = window.prompt('Technician ID', ticket.assignedTechnicianId || 'tech-17');
@@ -190,7 +262,7 @@ export const TicketDetailPage = () => {
             <div className="eyebrow mb-4">Module C case file</div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL' ? 'danger' : ticket.priority === 'MEDIUM' ? 'warning' : 'neutral'}>{ticket.priority} priority</Badge>
-              <Badge variant={ticket.status === 'IN_PROGRESS' ? 'info' : ticket.status === 'OPEN' ? 'warning' : ticket.status === 'REJECTED' ? 'danger' : 'success'}>{ticket.status.replace('_', ' ')}</Badge>
+              <Badge variant={statusBadgeVariant(ticket.status)}>{formatTicketStatusLabel(ticket.status)}</Badge>
               <Badge variant="info">Smart {ticket.smartPriorityLabel}</Badge>
             </div>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">{ticket.title}</h1>
@@ -201,8 +273,8 @@ export const TicketDetailPage = () => {
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Ticket header</p>
             <h2 className="mt-2 text-2xl font-semibold">TK-{ticket.id}</h2>
             <div className="mt-5 grid gap-3">
-              <InlineRow icon={<MapPin size={14} />} label="Location" value={ticket.resourceLocation || 'Unknown'} />
-              <InlineRow icon={<Wrench size={14} />} label="Assignee" value={ticket.assignedTechnicianName || 'Unassigned'} />
+              <InlineRow icon={<MapPin size={14} />} label="Incident spot" value={ticket.incidentLocation || ticket.resourceLocation || 'Unknown'} />
+              <InlineRow icon={<Wrench size={14} />} label="Assignee" value={ticket.assignedTechnicianName || ticket.assignedTechnicianId || 'Unassigned'} />
               <InlineRow icon={<Clock3 size={14} />} label="Age" value={formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })} />
               <InlineRow icon={<Radar size={14} />} label="Response target" value={ticket.responseTarget || 'Under review'} />
             </div>
@@ -217,9 +289,11 @@ export const TicketDetailPage = () => {
           <Card className="bg-white/70 p-6 dark:bg-white/5">
             <h2 className="text-xl font-semibold">Operational details</h2>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <DetailCard icon={<MapPin size={16} className="text-primary" />} title="Exact incident location" copy={ticket.incidentLocation || ticket.resourceLocation || 'Not provided'} />
+              <DetailCard icon={<MapPin size={16} className="text-primary" />} title="Asset base location" copy={ticket.resourceLocation || 'Not provided'} />
               <DetailCard icon={<PhoneCall size={16} className="text-primary" />} title="Preferred contact" copy={ticket.preferredContact || 'Not provided'} />
               <DetailCard icon={<UserRoundCog size={16} className="text-primary" />} title="Assigned technician" copy={ticket.assignedTechnicianName || ticket.assignedTechnicianId || 'Unassigned'} />
-              <DetailCard icon={<Paperclip size={16} className="text-primary" />} title="Evidence references" copy={ticket.evidenceLabels?.length ? `${ticket.evidenceLabels.length} item(s)` : ticket.evidenceNotes || 'No evidence reference supplied.'} />
+              <DetailCard icon={<Paperclip size={16} className="text-primary" />} title="Linked booking/session" copy={ticket.relatedBookingLabel || 'No booking context linked to this ticket.'} />
               <DetailCard icon={<AlertTriangle size={16} className="text-primary" />} title="Reported on" copy={format(new Date(ticket.createdAt), 'PPP p')} />
             </div>
           </Card>
@@ -311,6 +385,15 @@ export const TicketDetailPage = () => {
           </Card>
 
           <Card className="bg-white/70 p-6 dark:bg-white/5">
+            <div className="mb-4 flex items-center gap-2 text-xl font-semibold"><UserRoundCog size={18} className="text-primary" /> Role records</div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <DetailCard icon={<Paperclip size={16} className="text-primary" />} title="Reporter record" copy={`${ticket.reporterName} submitted this on ${formatTimestamp(ticket.createdAt)}.`} />
+              <DetailCard icon={<ShieldAlert size={16} className="text-primary" />} title="Admin record" copy={ticket.rejectedAt ? `${ticket.rejectedByName || 'Operations Admin'} rejected this on ${formatTimestamp(ticket.rejectedAt)}.` : ticket.assignedAt ? `${ticket.assignedByName || 'Operations Admin'} assigned the technician on ${formatTimestamp(ticket.assignedAt)}.` : 'Admin review is still pending a recorded desk action.'} />
+              <DetailCard icon={<Wrench size={16} className="text-primary" />} title="Technician record" copy={ticket.resolvedAt ? `${ticket.resolvedByName || ticket.assignedTechnicianName || 'Technician'} resolved this on ${formatTimestamp(ticket.resolvedAt)}.` : ticket.technicianStartedAt ? `${ticket.technicianStartedByName || ticket.assignedTechnicianName || 'Technician'} started work on ${formatTimestamp(ticket.technicianStartedAt)}.` : 'Technician work has not started yet.'} />
+            </div>
+          </Card>
+
+          <Card className="bg-white/70 p-6 dark:bg-white/5">
             <div className="mb-4 flex items-center gap-2 text-xl font-semibold"><ShieldAlert size={18} className="text-primary" /> Activity trail</div>
             <div className="space-y-3 text-sm text-muted-foreground">
               {ticket.activities?.map((activity) => (
@@ -328,45 +411,71 @@ export const TicketDetailPage = () => {
           <Card className="bg-primary/5 p-6 border-primary/20">
             <div className="mb-4 flex items-center gap-2 font-semibold"><Wrench size={18} className="text-primary" /> Lifecycle</div>
             <div className="space-y-3">
-              {timeline.map((step, index) => (
-                <div key={step.key} className={`rounded-2xl border px-4 py-4 ${step.active ? step.danger ? 'border-danger/30 bg-danger/5' : 'border-primary/20 bg-white/50 dark:bg-white/5' : 'border-border bg-muted/40 dark:bg-white/5'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${step.active ? step.danger ? 'bg-danger text-white' : 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>{index + 1}</div>
-                    <div>
-                      <p className="text-sm font-semibold">{step.title}</p>
-                      <p className="text-xs text-muted-foreground">{step.active ? 'Reached in current workflow' : 'Pending step'}</p>
+              {timeline.map((step, index) => {
+                const isCompleted = step.state === 'completed';
+                const isCurrent = step.state === 'current';
+                const containerClass = isCurrent
+                  ? step.danger
+                    ? 'border-danger/30 bg-danger/5'
+                    : 'border-primary/20 bg-white/50 dark:bg-white/5'
+                  : isCompleted
+                    ? 'border-success/20 bg-success/5'
+                    : 'border-border bg-muted/40 dark:bg-white/5';
+                const badgeClass = isCurrent
+                  ? step.danger
+                    ? 'bg-danger text-white'
+                    : 'bg-primary text-white'
+                  : isCompleted
+                    ? 'bg-success text-white'
+                    : 'bg-muted text-muted-foreground';
+                const statusCopy = isCurrent
+                  ? 'Current step'
+                  : isCompleted
+                    ? 'Completed'
+                    : 'Pending step';
+
+                return (
+                  <div key={step.key} className={`rounded-2xl border px-4 py-4 ${containerClass}`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${badgeClass}`}>{index + 1}</div>
+                      <div>
+                        <p className="text-sm font-semibold">{step.title}</p>
+                        <p className="text-xs text-muted-foreground">{step.owner} · {statusCopy}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
 
           <Card className="bg-white/70 p-6 dark:bg-white/5">
             <div className="mb-4 text-sm font-semibold uppercase tracking-[0.24em] text-muted-foreground">Role actions</div>
             <div className="space-y-3">
+              {isReporter && ticket.status === 'OPEN' && (
+                <>
+                  <Button className="w-full gap-2" onClick={handleEditTicket}>Edit Ticket</Button>
+                  <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'delete-ticket'} onClick={handleDeleteTicket}>Delete Ticket</Button>
+                </>
+              )}
               {isReporter && ticket.status === 'RESOLVED' && (
                 <>
                   <Button className="w-full gap-2" isLoading={busyAction === 'close'} onClick={handleConfirmFixed}>Confirm Fixed</Button>
                   <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'reopen'} onClick={handleStillBroken}>Report Still Broken</Button>
                 </>
               )}
-              {isAdmin && (
+              {isAdmin && ticket.status !== 'REJECTED' && (
                 <>
-                  <Button className="w-full gap-2" isLoading={busyAction === 'assign'} onClick={handleAdminAssign}>Assign Technician</Button>
-                  {ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED' && ticket.status !== 'REJECTED' && (
-                    <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'admin-progress'} onClick={() => runAction('admin-progress', () => updateTicketStatus(ticket.id, {
-                      status: ticket.status === 'IN_PROGRESS' ? 'RESOLVED' : 'IN_PROGRESS',
-                      resolutionNotes: ticket.status === 'IN_PROGRESS' ? (window.prompt('Resolution notes', ticket.resolutionNotes || 'Issue fixed and tested successfully.') || '') : ticket.resolutionNotes || '',
-                      actorId: user.id,
-                      actorName: user.name,
-                      actorRole: toBackendRole(user.role),
-                      detail: ticket.status === 'IN_PROGRESS' ? 'Admin resolved the ticket after reviewing work.' : 'Admin moved the ticket into active progress.',
-                    }))}>
-                      {ticket.status === 'IN_PROGRESS' ? 'Mark Resolved' : 'Move To In Progress'}
-                    </Button>
+                  {!ticket.assignedTechnicianId && ticket.status !== 'IN_PROGRESS' && ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED' && (
+                    <Button className="w-full gap-2" isLoading={busyAction === 'assign'} onClick={handleAdminAssign}>Assign Technician</Button>
+                  )}
+                  {ticket.status !== 'IN_PROGRESS' && ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED' && (
+                    <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'reject'} onClick={handleAdminReject}>Reject Ticket</Button>
                   )}
                 </>
+              )}
+              {isAdmin && ticket.status === 'REJECTED' && (
+                <p className="text-sm text-muted-foreground">This ticket has been fully rejected and is now read-only in the admin workflow.</p>
               )}
               {isTechnician && (
                 <>
@@ -408,6 +517,8 @@ const DetailCard = ({ icon, title, copy }) => (
   </div>
 );
 
+const formatTimestamp = (value) => value ? format(new Date(value), 'PPP p') : 'Not recorded yet';
+
 const SignalCard = ({ icon, title, value, copy }) => (
   <div className="rounded-2xl border border-border bg-white/45 px-4 py-4 dark:bg-white/5">
     <div className="mb-2 flex items-center gap-2 font-semibold">{icon}{title}</div>
@@ -422,3 +533,12 @@ const InlineRow = ({ icon, label, value }) => (
     <span className="text-sm font-semibold text-white">{value}</span>
   </div>
 );
+
+
+
+
+
+
+
+
+

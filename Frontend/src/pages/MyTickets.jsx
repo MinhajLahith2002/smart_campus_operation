@@ -5,12 +5,14 @@ import { AlertCircle, ChevronRight, Clock, MapPin, MessageSquareMore, Paperclip,
 import { Card, Badge, Button } from '../components/ui/Primitives';
 import { cn } from '../lib/utils';
 import { getTickets } from '../lib/moduleCApi';
+import { formatTicketStatusLabel, statusBadgeVariant } from '../lib/moduleCLabels';
 import { useAuth } from '../context/AuthContext';
 
 export const MyTickets = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [filter, setFilter] = useState('ALL');
+  const [activeFilter, setActiveFilter] = useState('ALL');
+  const [archiveFilter, setArchiveFilter] = useState('ALL');
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,17 +37,34 @@ export const MyTickets = () => {
     return () => { ignore = true; };
   }, [user]);
 
-  const filteredTickets = useMemo(
-    () => tickets.filter((ticket) => filter === 'ALL' || ticket.status === filter),
-    [tickets, filter]
+  const activeTickets = useMemo(
+    () => tickets.filter((ticket) => !['CLOSED', 'REJECTED'].includes(ticket.status)),
+    [tickets]
+  );
+
+  const archiveTickets = useMemo(
+    () => tickets.filter((ticket) => ['CLOSED', 'REJECTED'].includes(ticket.status)),
+    [tickets]
+  );
+
+  const filteredActiveTickets = useMemo(
+    () => activeTickets.filter((ticket) => activeFilter === 'ALL' || ticket.status === activeFilter),
+    [activeTickets, activeFilter]
+  );
+
+  const filteredArchiveTickets = useMemo(
+    () => archiveTickets.filter((ticket) => archiveFilter === 'ALL' || ticket.status === archiveFilter),
+    [archiveTickets, archiveFilter]
   );
 
   const metrics = {
     total: tickets.length,
     open: tickets.filter((ticket) => ticket.status === 'OPEN').length,
+    assigned: tickets.filter((ticket) => ticket.status === 'ASSIGNED').length,
     inProgress: tickets.filter((ticket) => ticket.status === 'IN_PROGRESS').length,
     resolved: tickets.filter((ticket) => ticket.status === 'RESOLVED').length,
     closed: tickets.filter((ticket) => ticket.status === 'CLOSED').length,
+    rejected: tickets.filter((ticket) => ticket.status === 'REJECTED').length,
   };
 
   return (
@@ -62,27 +81,27 @@ export const MyTickets = () => {
           <div className="grid gap-4 sm:grid-cols-5 lg:grid-cols-1 xl:grid-cols-5">
             <MetricCard label="Total" value={`${metrics.total}`} />
             <MetricCard label="Open" value={`${metrics.open}`} />
+            <MetricCard label="Assigned" value={`${metrics.assigned}`} />
             <MetricCard label="In progress" value={`${metrics.inProgress}`} />
             <MetricCard label="Resolved" value={`${metrics.resolved}`} />
-            <MetricCard label="Closed" value={`${metrics.closed}`} />
           </div>
         </div>
       </section>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-          {['ALL', 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'REJECTED'].map((status) => (
+          {['ALL', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED'].map((status) => (
             <button
               key={status}
-              onClick={() => setFilter(status)}
+              onClick={() => setActiveFilter(status)}
               className={cn(
                 'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-all',
-                filter === status
+                activeFilter === status
                   ? 'border-primary bg-primary text-white shadow-md'
                   : 'border-border bg-card text-muted-foreground hover:border-primary/50'
               )}
             >
-              {status.replace('_', ' ')}
+              {formatTicketStatusLabel(status)}
             </button>
           ))}
         </div>
@@ -92,76 +111,68 @@ export const MyTickets = () => {
         </Button>
       </div>
 
+      <Card className="bg-white/70 p-5 dark:bg-white/5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">Outcome archive</p>
+            <p className="mt-2 text-sm text-muted-foreground">Closed and rejected tickets stay here so your active workflow remains clean.</p>
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {['ALL', 'CLOSED', 'REJECTED'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setArchiveFilter(status)}
+                className={cn(
+                  'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-all',
+                  archiveFilter === status
+                    ? 'border-primary bg-primary text-white shadow-md'
+                    : 'border-border bg-card text-muted-foreground hover:border-primary/50'
+                )}
+              >
+                {status === 'ALL' ? `All outcomes (${archiveTickets.length})` : `${formatTicketStatusLabel(status)} (${status === 'CLOSED' ? metrics.closed : metrics.rejected})`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+
       {error && <Card className="border-danger/30 bg-danger/5 p-5 text-sm text-danger">{error}</Card>}
 
       {loading ? (
         <Card className="p-8 text-sm text-muted-foreground">Loading ticket history...</Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
-          {filteredTickets.map((ticket) => {
-            const latestActivity = ticket.activities?.[ticket.activities.length - 1];
-            return (
-              <Card key={ticket.id} className="overflow-hidden p-0 transition-all hover:border-primary/30">
-                <div className="flex flex-col md:flex-row">
-                  <div
-                    className={cn(
-                      'w-2 shrink-0 md:w-3',
-                      ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL'
-                        ? 'bg-danger'
-                        : ticket.priority === 'MEDIUM'
-                          ? 'bg-warning'
-                          : 'bg-success'
-                    )}
-                  />
-                  <div className="flex-1 space-y-5 p-6">
-                    <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">TK-{ticket.id}</span>
-                          <Badge variant={ticket.status === 'IN_PROGRESS' ? 'info' : ticket.status === 'OPEN' ? 'warning' : ticket.status === 'REJECTED' ? 'danger' : 'success'}>
-                            {ticket.status.replace('_', ' ')}
-                          </Badge>
-                          <Badge variant={ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL' ? 'danger' : ticket.priority === 'MEDIUM' ? 'warning' : 'neutral'}>
-                            {ticket.priority} priority
-                          </Badge>
-                        </div>
-
-                        <h3 className="text-xl font-semibold">{ticket.title}</h3>
-                        <p className="text-sm leading-7 text-muted-foreground">{ticket.description}</p>
-
-                        <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-                          <p className="flex items-center gap-2"><MapPin size={14} /> {ticket.resourceName}</p>
-                          <p className="flex items-center gap-2"><Clock size={14} /> {format(new Date(ticket.createdAt), 'MMM d, yyyy')}</p>
-                          <p className="flex items-center gap-2"><AlertCircle size={14} /> {ticket.category}</p>
-                          <p className="flex items-center gap-2"><Paperclip size={14} /> {ticket.evidenceLabels?.length || 0} evidence ref(s)</p>
-                        </div>
-                      </div>
-
-                      <Button variant="ghost" className="gap-2 xl:self-center" onClick={() => navigate(`/tickets/${ticket.id}`)}>
-                        View Details <ChevronRight size={18} />
-                      </Button>
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <InfoTile title="Latest activity" icon={<MessageSquareMore size={16} className="text-primary" />} copy={latestActivity ? latestActivity.detail : 'No follow-up activity yet.'} />
-                      <InfoTile title="Assigned technician" icon={<Wrench size={16} className="text-primary" />} copy={ticket.assignedTechnicianName || 'Pending assignment'} />
-                      <InfoTile title="Resolution note" icon={<AlertCircle size={16} className="text-primary" />} copy={ticket.resolutionNotes || 'No resolution note yet.'} />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-
-          {!filteredTickets.length && (
-            <div className="rounded-2xl border border-dashed border-border bg-card py-20 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <TicketIcon size={24} />
-              </div>
-              <h3 className="font-bold">No tickets found</h3>
-              <p className="text-muted-foreground">There are no incident records in this filter right now.</p>
+        <div className="space-y-8">
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Active tickets</h2>
+              <Badge variant="info">Live workflow</Badge>
             </div>
-          )}
+            <div className="grid grid-cols-1 gap-4">
+              {filteredActiveTickets.map((ticket) => (
+                <TicketListCard key={ticket.id} ticket={ticket} onOpen={() => navigate(`/tickets/${ticket.id}`)} />
+              ))}
+
+              {!filteredActiveTickets.length && (
+                <EmptyState title="No active tickets found" copy="There are no live incident records in this filter right now." />
+              )}
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Outcome archive</h2>
+              <Badge variant="warning">Closed and rejected only</Badge>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              {filteredArchiveTickets.map((ticket) => (
+                <TicketListCard key={ticket.id} ticket={ticket} onOpen={() => navigate(`/tickets/${ticket.id}`)} archived />
+              ))}
+
+              {!filteredArchiveTickets.length && (
+                <EmptyState title="No archived tickets found" copy="Closed and rejected tickets will appear here instead of mixing with active work." />
+              )}
+            </div>
+          </section>
         </div>
       )}
     </div>
@@ -182,5 +193,73 @@ const InfoTile = ({ title, icon, copy }) => (
       {title}
     </div>
     <p className="text-sm leading-7 text-muted-foreground">{copy}</p>
+  </div>
+);
+
+const TicketListCard = ({ ticket, onOpen, archived = false }) => {
+  const latestActivity = ticket.activities?.[ticket.activities.length - 1];
+
+  return (
+    <Card className="overflow-hidden p-0 transition-all hover:border-primary/30">
+      <div className="flex flex-col md:flex-row">
+        <div
+          className={cn(
+            'w-2 shrink-0 md:w-3',
+            ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL'
+              ? 'bg-danger'
+              : ticket.priority === 'MEDIUM'
+                ? 'bg-warning'
+                : 'bg-success'
+          )}
+        />
+        <div className="flex-1 space-y-5 p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">TK-{ticket.id}</span>
+                <Badge variant={statusBadgeVariant(ticket.status)}>
+                  {formatTicketStatusLabel(ticket.status)}
+                </Badge>
+                <Badge variant={ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL' ? 'danger' : ticket.priority === 'MEDIUM' ? 'warning' : 'neutral'}>
+                  {ticket.priority} priority
+                </Badge>
+                {archived && <Badge variant="neutral">Archived outcome</Badge>}
+              </div>
+
+              <h3 className="text-xl font-semibold">{ticket.title}</h3>
+              <p className="text-sm leading-7 text-muted-foreground">{ticket.description}</p>
+
+              <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+                <p className="flex items-center gap-2"><MapPin size={14} /> {ticket.resourceName}</p>
+                <p className="flex items-center gap-2"><Clock size={14} /> {format(new Date(ticket.createdAt), 'MMM d, yyyy')}</p>
+                <p className="flex items-center gap-2"><AlertCircle size={14} /> {ticket.category}</p>
+                <p className="flex items-center gap-2"><Paperclip size={14} /> {ticket.evidenceLabels?.length || 0} evidence ref(s)</p>
+              </div>
+            </div>
+
+            <Button variant="ghost" className="gap-2 xl:self-center" onClick={onOpen}>
+              View Details <ChevronRight size={18} />
+            </Button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-4">
+            <InfoTile title="Latest activity" icon={<MessageSquareMore size={16} className="text-primary" />} copy={latestActivity ? latestActivity.detail : 'No follow-up activity yet.'} />
+            <InfoTile title="Admin handling" icon={<AlertCircle size={16} className="text-primary" />} copy={ticket.rejectedAt ? `${ticket.rejectedByName || 'Operations Admin'} rejected this ticket.` : ticket.assignedAt ? `${ticket.assignedByName || 'Operations Admin'} assigned it on ${format(new Date(ticket.assignedAt), 'MMM d, yyyy')}.` : 'Awaiting a recorded admin decision.'} />
+            <InfoTile title="Technician progress" icon={<Wrench size={16} className="text-primary" />} copy={ticket.resolvedAt ? `${ticket.resolvedByName || ticket.assignedTechnicianName || 'Technician'} resolved it.` : ticket.technicianStartedAt ? `${ticket.technicianStartedByName || ticket.assignedTechnicianName || 'Technician'} started work.` : ticket.assignedTechnicianName || ticket.assignedTechnicianId || (ticket.status === 'ASSIGNED' ? 'Technician assigned' : 'Pending assignment')} />
+            <InfoTile title={archived ? 'Final outcome' : 'Resolution note'} icon={<AlertCircle size={16} className="text-primary" />} copy={ticket.rejectionReason || ticket.resolutionNotes || 'No final outcome note yet.'} />
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+const EmptyState = ({ title, copy }) => (
+  <div className="rounded-2xl border border-dashed border-border bg-card py-20 text-center">
+    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+      <TicketIcon size={24} />
+    </div>
+    <h3 className="font-bold">{title}</h3>
+    <p className="text-muted-foreground">{copy}</p>
   </div>
 );

@@ -1,5 +1,6 @@
 package com.smartcampus.modulec.controller;
 
+import com.smartcampus.modulec.domain.UserRole;
 import com.smartcampus.modulec.dto.AssignTechnicianRequest;
 import com.smartcampus.modulec.dto.CreateTicketRequest;
 import com.smartcampus.modulec.dto.TicketCommentRequest;
@@ -11,6 +12,8 @@ import com.smartcampus.modulec.dto.TicketSummaryResponse;
 import com.smartcampus.modulec.dto.UpdateTicketStatusRequest;
 import com.smartcampus.modulec.service.TicketService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,8 +50,22 @@ public class TicketController {
     }
 
     @GetMapping("/{ticketId}")
-    public TicketResponse getTicket(@PathVariable Long ticketId) {
-        return ticketService.getTicket(ticketId);
+    public TicketResponse getTicket(
+            @PathVariable Long ticketId,
+            @RequestParam @NotNull UserRole requesterRole,
+            @RequestParam(required = false) @Size(max = 80) String requesterId) {
+        return ticketService.getTicket(ticketId, requesterId, requesterRole);
+    }
+
+    @PutMapping("/{ticketId}")
+    public TicketResponse updateTicket(@PathVariable Long ticketId, @Valid @RequestBody CreateTicketRequest request) {
+        return ticketService.updateTicket(ticketId, request);
+    }
+
+    @DeleteMapping("/{ticketId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTicket(@PathVariable Long ticketId, @Valid @RequestBody TicketDecisionRequest request) {
+        ticketService.deleteTicket(ticketId, request);
     }
 
     @PatchMapping("/{ticketId}/assign")

@@ -48,10 +48,13 @@ export const getBookings = async ({ role, userId, status } = {}) => {
 };
 
 export const getBookingSummary = async () => jsonRequest(`${API_BASE}/bookings/summary`);
+export const getBooking = async (bookingId) => jsonRequest(`${API_BASE}/bookings/${bookingId}`);
 export const createBooking = async (payload) => jsonRequest(`${API_BASE}/bookings`, { method: 'POST', body: JSON.stringify(payload) });
+export const updateBooking = async (bookingId, payload) => jsonRequest(`${API_BASE}/bookings/${bookingId}`, { method: 'PUT', body: JSON.stringify(payload) });
 export const approveBooking = async (bookingId, payload) => jsonRequest(`${API_BASE}/bookings/${bookingId}/approve`, { method: 'PATCH', body: JSON.stringify(payload) });
 export const rejectBooking = async (bookingId, payload) => jsonRequest(`${API_BASE}/bookings/${bookingId}/reject`, { method: 'PATCH', body: JSON.stringify(payload) });
 export const cancelBooking = async (bookingId, payload) => jsonRequest(`${API_BASE}/bookings/${bookingId}/cancel`, { method: 'PATCH', body: JSON.stringify(payload) });
+export const requestBookingCancellation = async (bookingId, payload) => jsonRequest(`${API_BASE}/bookings/${bookingId}/request-cancel`, { method: 'PATCH', body: JSON.stringify(payload) });
 
 export const getNotifications = async ({ role, userId } = {}) => {
   const search = new URLSearchParams({ role: role || 'USER' });

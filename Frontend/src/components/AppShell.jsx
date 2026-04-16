@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { Button, Badge } from '../components/ui/Primitives';
+import { getNotifications } from '../lib/operationsApi';
 
 const SidebarItem = ({ item, collapsed, active }) => {
   const Icon = item.icon;
@@ -67,6 +68,74 @@ export const AppShell = ({ children }) => {
   const location = useLocation();
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [latestTechnicianAlert, setLatestTechnicianAlert] = React.useState(null);
+  const seenNotificationIdsRef = React.useRef(new Set());
+  const technicianAlertBootstrappedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!user || user.role !== 'TECHNICIAN') {
+      setLatestTechnicianAlert(null);
+      seenNotificationIdsRef.current = new Set();
+      technicianAlertBootstrappedRef.current = false;
+      return undefined;
+    }
+
+    const storageKey = `hub_seen_notifications_${user.id}`;
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      seenNotificationIdsRef.current = new Set(saved);
+    } catch (_) {
+      seenNotificationIdsRef.current = new Set();
+    }
+
+    const persistSeen = () => {
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(seenNotificationIdsRef.current)));
+    };
+
+    const maybeNotify = (notification) => {
+      if (typeof window === 'undefined' || !('Notification' in window)) return;
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+        return;
+      }
+      if (Notification.permission === 'granted') {
+        new Notification(notification.title, {
+          body: notification.message,
+          tag: `technician-alert-${notification.id}`,
+        });
+      }
+    };
+
+    const pollNotifications = async () => {
+      try {
+        const notifications = await getNotifications({ role: user.role, userId: user.id });
+        const assignmentAlerts = notifications.filter((item) => item.type === 'TICKET_STATUS');
+
+        if (!technicianAlertBootstrappedRef.current) {
+          seenNotificationIdsRef.current = new Set(assignmentAlerts.map((item) => item.id));
+          persistSeen();
+          technicianAlertBootstrappedRef.current = true;
+          return;
+        }
+
+        const freshAlerts = assignmentAlerts.filter((item) => !seenNotificationIdsRef.current.has(item.id));
+        if (!freshAlerts.length) return;
+
+        freshAlerts.forEach((alert) => seenNotificationIdsRef.current.add(alert.id));
+        persistSeen();
+
+        const newestAlert = freshAlerts[0];
+        setLatestTechnicianAlert(newestAlert);
+        maybeNotify(newestAlert);
+      } catch (_) {
+        // quiet poll failure keeps the shell stable
+      }
+    };
+
+    pollNotifications();
+    const intervalId = window.setInterval(pollNotifications, 15000);
+    return () => window.clearInterval(intervalId);
+  }, [user]);
 
   const ticketItem = user?.role === 'ADMIN'
     ? { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Triage and assignment' }
@@ -74,20 +143,21 @@ export const AppShell = ({ children }) => {
       ? { to: '/tickets/assigned', icon: Wrench, label: 'Assigned Work', hint: 'Technician queue' }
       : { to: '/tickets/my', icon: Ticket, label: 'My Tickets', hint: 'Report and track repairs' };
 
+  const bookingItem = user?.role === 'ADMIN'
+    ? { to: '/admin/bookings', icon: CalendarRange, label: 'Booking Desk', hint: 'Approve or reject requests' }
+    : user?.role === 'USER'
+      ? { to: '/bookings/my', icon: CalendarRange, label: 'My Bookings', hint: 'Reservations and requests' }
+      : null;
+
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Overview', hint: 'Campus pulse' },
     { to: '/catalogue', icon: Search, label: 'Catalogue', hint: 'Find spaces and assets' },
-    { to: '/bookings/my', icon: CalendarRange, label: 'Bookings', hint: 'Reservations and approvals' },
+    bookingItem,
     ticketItem,
     { to: '/notifications', icon: Bell, label: 'Signals', hint: 'Alerts and activity' },
-  ];
+  ].filter(Boolean);
 
-  const adminItems = user?.role === 'ADMIN'
-    ? [
-        { to: '/admin/bookings', icon: ShieldCheck, label: 'Booking Desk', hint: 'Operational queue' },
-        { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Assign and triage' },
-      ]
-    : [];
+  const adminItems = [];
 
   const allItems = [...navItems, ...adminItems, { to: '/settings', icon: Settings, label: 'Settings', hint: 'Preferences and theme' }];
 
@@ -125,6 +195,15 @@ export const AppShell = ({ children }) => {
                   <p className="text-sm font-semibold">Role-aware workspace online</p>
                   <p className="text-xs text-slate-300">{user?.role === 'ADMIN' ? 'Triage controls enabled' : user?.role === 'TECHNICIAN' ? 'Assigned work queue active' : 'Reporter ticket tracking active'}</p>
                 </div>
+              </div>
+            )}
+            {!collapsed && user?.role === 'TECHNICIAN' && latestTechnicianAlert && (
+              <div className="mt-4 rounded-2xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-foreground">
+                <div className="flex items-center gap-2 font-semibold">
+                  <Bell size={16} className="text-warning" />
+                  New technician alert
+                </div>
+                <p className="mt-2 text-muted-foreground">{latestTechnicianAlert.message}</p>
               </div>
             )}
           </div>

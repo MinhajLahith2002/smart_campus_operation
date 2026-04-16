@@ -10,7 +10,7 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record CreateTicketRequest(
-        @NotBlank @Size(max = 120) String title,
+        @Size(max = 120) String title,
         @NotBlank @Size(max = 2000) String description,
         @NotNull TicketCategory category,
         @NotNull TicketPriority priority,
@@ -20,6 +20,9 @@ public record CreateTicketRequest(
         @NotNull UserRole reporterRole,
         @NotBlank @Size(max = 120) String resourceName,
         @NotBlank @Size(max = 160) String resourceLocation,
+        @NotBlank @Size(max = 200) String incidentLocation,
+        Long relatedBookingId,
+        @Size(max = 200) String relatedBookingLabel,
         @Size(max = 120) String resourceType,
         @Size(max = 120) String preferredContact,
         @Size(max = 120) String operationalImpact,

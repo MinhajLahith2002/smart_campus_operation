@@ -10,6 +10,7 @@ const normaliseUser = (role, details = {}) => {
     name: details.name || defaults.name,
     email: details.email || defaults.email,
     campusId: details.campusId || defaults.campusId,
+    phone: details.phone || defaults.phone,
     role,
     avatar: details.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`,
   };

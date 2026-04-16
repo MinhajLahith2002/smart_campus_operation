@@ -4,7 +4,7 @@ import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Calendar, Clock, Users, Info, ArrowLeft, CheckCircle2, MapPin, ShieldCheck, ClipboardList, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
-import { createBooking, getResource } from '../lib/operationsApi';
+import { createBooking, getResource, getBooking, updateBooking } from '../lib/operationsApi';
 import { toBackendRole } from '../lib/moduleCApi';
 
 export const BookingRequest = () => {
@@ -12,8 +12,10 @@ export const BookingRequest = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const resourceId = searchParams.get('resourceId');
+  const editId = searchParams.get('editId');
   const [resource, setResource] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [fetchingBooking, setFetchingBooking] = useState(false);
   const [error, setError] = useState('');
 
   const [formData, setFormData] = useState({
@@ -50,6 +52,33 @@ export const BookingRequest = () => {
       active = false;
     };
   }, [resourceId]);
+
+  useEffect(() => {
+    let active = true;
+    const loadBooking = async () => {
+      if (!editId) return;
+      try {
+        setFetchingBooking(true);
+        const booking = await getBooking(editId);
+        if (!active) return;
+        setFormData({
+          date: booking.bookingDate,
+          startTime: booking.startTime.slice(0, 5),
+          endTime: booking.endTime.slice(0, 5),
+          purpose: booking.purpose,
+          attendees: booking.attendees,
+        });
+      } catch (err) {
+        if (active) setError(err.message || 'Unable to load booking details for editing.');
+      } finally {
+        if (active) setFetchingBooking(false);
+      }
+    };
+    loadBooking();
+    return () => {
+      active = false;
+    };
+  }, [editId]);
 
   const helperError = useMemo(() => {
     if (!resource) return '';
@@ -88,7 +117,7 @@ export const BookingRequest = () => {
     try {
       setIsSubmitting(true);
       setError('');
-      await createBooking({
+      const payload = {
         resourceId: Number(resource.id),
         requesterId: user.id,
         requesterName: user.name,
@@ -99,7 +128,13 @@ export const BookingRequest = () => {
         endTime: formData.endTime,
         purpose: formData.purpose,
         attendees: Number(formData.attendees),
-      });
+      };
+
+      if (editId) {
+        await updateBooking(editId, payload);
+      } else {
+        await createBooking(payload);
+      }
       setIsSuccess(true);
     } catch (err) {
       setError(err.message || 'Unable to submit the booking request.');
@@ -143,7 +178,9 @@ export const BookingRequest = () => {
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <div className="eyebrow mb-4">Booking workflow</div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Submit a booking request with policy and resource context visible the whole way through.</h1>
+            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+              {editId ? 'Modify your reservation request details before admin review begins.' : 'Submit a booking request with policy and resource context visible.'}
+            </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
               This flow is redesigned around the handover idea of approval-aware requests. The form keeps the asset summary, operational rules, and approval journey close to the input fields.
             </p>
@@ -243,7 +280,7 @@ export const BookingRequest = () => {
 
               <div className="pt-2">
                 <Button type="submit" className="w-full gap-2 py-6 text-lg" isLoading={isSubmitting}>
-                  Submit Booking Request
+                  {editId ? 'Update Booking Request' : 'Submit Booking Request'}
                   {!isSubmitting && <ArrowRight size={18} />}
                 </Button>
               </div>

@@ -38,13 +38,15 @@ public class BookingRecord {
     private BookingStatus status;
 
     private String rejectionReason;
+    private String cancellationRequestNote;
+    private OffsetDateTime cancellationRequestedAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Long getResourceId() { return resourceId; }
-    public void setResourceId(Long resourceId) { this.resourceId = resourceId; }
+    public void setResourceId(Long id) { this.resourceId = id; }
     public String getResourceName() { return resourceName; }
     public void setResourceName(String resourceName) { this.resourceName = resourceName; }
     public String getResourceLocation() { return resourceLocation; }
@@ -71,6 +73,10 @@ public class BookingRecord {
     public void setStatus(BookingStatus status) { this.status = status; }
     public String getRejectionReason() { return rejectionReason; }
     public void setRejectionReason(String rejectionReason) { this.rejectionReason = rejectionReason; }
+    public String getCancellationRequestNote() { return cancellationRequestNote; }
+    public void setCancellationRequestNote(String cancellationRequestNote) { this.cancellationRequestNote = cancellationRequestNote; }
+    public OffsetDateTime getCancellationRequestedAt() { return cancellationRequestedAt; }
+    public void setCancellationRequestedAt(OffsetDateTime cancellationRequestedAt) { this.cancellationRequestedAt = cancellationRequestedAt; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }

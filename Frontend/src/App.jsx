@@ -45,6 +45,14 @@ const TicketsEntryRedirect = () => {
   return <Navigate to="/tickets/my" replace />;
 };
 
+const BookingsEntryRedirect = () => {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/auth" replace />;
+  if (user.role === 'ADMIN') return <Navigate to="/admin/bookings" replace />;
+  if (user.role === 'USER') return <Navigate to="/bookings/my" replace />;
+  return <Navigate to="/dashboard" replace />;
+};
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -56,12 +64,14 @@ export default function App() {
 
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/catalogue" element={<ProtectedRoute><Catalogue /></ProtectedRoute>} />
-            <Route path="/bookings/my" element={<ProtectedRoute><MyBookings /></ProtectedRoute>} />
-            <Route path="/bookings/new" element={<ProtectedRoute><BookingRequest /></ProtectedRoute>} />
+            <Route path="/bookings" element={<ProtectedRoute><BookingsEntryRedirect /></ProtectedRoute>} />
+            <Route path="/bookings/my" element={<ProtectedRoute><RoleRoute roles={['USER']}><MyBookings /></RoleRoute></ProtectedRoute>} />
+            <Route path="/bookings/new" element={<ProtectedRoute><RoleRoute roles={['USER']}><BookingRequest /></RoleRoute></ProtectedRoute>} />
 
             <Route path="/tickets" element={<ProtectedRoute><TicketsEntryRedirect /></ProtectedRoute>} />
             <Route path="/tickets/my" element={<ProtectedRoute><RoleRoute roles={['USER']}><MyTickets /></RoleRoute></ProtectedRoute>} />
             <Route path="/tickets/new" element={<ProtectedRoute><RoleRoute roles={['USER', 'ADMIN', 'TECHNICIAN']}><ReportIssuePage /></RoleRoute></ProtectedRoute>} />
+            <Route path="/tickets/:ticketId/edit" element={<ProtectedRoute><RoleRoute roles={['USER']}><ReportIssuePage /></RoleRoute></ProtectedRoute>} />
             <Route path="/tickets/assigned" element={<ProtectedRoute><RoleRoute roles={['TECHNICIAN']}><TechnicianTicketsPage /></RoleRoute></ProtectedRoute>} />
             <Route path="/tickets/:ticketId" element={<ProtectedRoute><TicketDetailPage /></ProtectedRoute>} />
 

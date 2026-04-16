@@ -25,6 +25,7 @@ export const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const isTechnician = user?.role === 'TECHNICIAN';
+  const hasBookingAccess = !isTechnician;
   const firstName = user?.name.split(' ')[0] ?? 'Operator';
   const [incidentSummary, setIncidentSummary] = useState(null);
   const [incidentTickets, setIncidentTickets] = useState([]);
@@ -41,8 +42,8 @@ export const Dashboard = () => {
         const [ticketSummaryData, ticketData, bookingData, bookingSummaryData, resourceData, resourceSummaryData, notificationSummaryData] = await Promise.all([
           getTicketSummary(),
           getTickets({ role: user?.role, userId: user?.id, assignedToMe: isTechnician }),
-          getBookings({ role: isAdmin ? 'ADMIN' : user?.role, userId: isAdmin ? undefined : user?.id }),
-          getBookingSummary(),
+          hasBookingAccess ? getBookings({ role: isAdmin ? 'ADMIN' : user?.role, userId: isAdmin ? undefined : user?.id }) : Promise.resolve([]),
+          hasBookingAccess ? getBookingSummary() : Promise.resolve(null),
           getResources(),
           getResourceSummary(),
           getNotificationSummary({ role: user?.role, userId: user?.id }),
@@ -63,9 +64,11 @@ export const Dashboard = () => {
     };
     if (user) loadDashboard();
     return () => { ignore = true; };
-  }, [user, isTechnician, isAdmin]);
+  }, [user, isTechnician, isAdmin, hasBookingAccess]);
 
-  const approvedBookings = bookingSummary?.approved ?? bookings.filter((booking) => booking.status === 'APPROVED').length;
+  const bookingRoute = isAdmin ? '/admin/bookings' : '/bookings/my';
+  const bookingTitle = isAdmin ? 'Booking desk' : 'Upcoming bookings';
+  const approvedBookings = hasBookingAccess ? (bookingSummary?.approved ?? bookings.filter((booking) => booking.status === 'APPROVED').length) : 0;
   const activeResources = resourceSummary?.activeResources ?? resources.filter((resource) => resource.status === 'ACTIVE').length;
   const resourceCount = resourceSummary?.totalResources ?? resources.length;
   const openTickets = incidentSummary?.open ?? incidentTickets.filter((ticket) => ticket.status !== 'CLOSED').length;
@@ -93,7 +96,7 @@ export const Dashboard = () => {
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">{heroCopy}</p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link to="/catalogue"><Button className="gap-2"><Plus size={18} /> New booking</Button></Link>
+              {hasBookingAccess ? <Link to={isAdmin ? bookingRoute : '/catalogue'}><Button className="gap-2"><Plus size={18} /> {isAdmin ? 'Open booking desk' : 'New booking'}</Button></Link> : <Link to="/catalogue"><Button className="gap-2"><Search size={18} /> View assets</Button></Link>}
               <Link to={isAdmin || isTechnician ? roleTicketRoute : '/tickets/new'}><Button variant="outline" className="gap-2"><Wrench size={18} /> {isAdmin ? 'Open incident desk' : isTechnician ? 'Open assigned queue' : 'Report issue'}</Button></Link>
               <Link to="/notifications"><Button variant="ghost" className="gap-2"><Bell size={18} /> Review signals</Button></Link>
             </div>
@@ -126,7 +129,7 @@ export const Dashboard = () => {
 
       <div className="grid gap-8 xl:grid-cols-[1.1fr_1.1fr_0.8fr]">
         <section className="space-y-4">
-          <SectionHeader title="Upcoming bookings" to="/bookings/my" />
+          <SectionHeader title={bookingTitle} to={bookingRoute} />
           <div className="space-y-3">
             {bookings.map((booking) => {
               const resource = resources.find((item) => item.id === booking.resourceId);
@@ -184,7 +187,7 @@ export const Dashboard = () => {
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Quick actions</p>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <QuickAction icon={<Search size={18} />} label="Find lab" to="/catalogue" />
-              <QuickAction icon={<Calendar size={18} />} label="Book room" to="/catalogue" />
+              <QuickAction icon={<Calendar size={18} />} label={hasBookingAccess ? (isAdmin ? 'Desk' : 'Book room') : 'Assets'} to={hasBookingAccess ? bookingRoute : '/catalogue'} />
               <QuickAction icon={<Ticket size={18} />} label={isAdmin ? 'Desk' : isTechnician ? 'My work' : 'Open ticket'} to={isAdmin || isTechnician ? roleTicketRoute : '/tickets/new'} />
               <QuickAction icon={<Bell size={18} />} label="Signals" to="/notifications" />
             </div>
@@ -259,3 +262,6 @@ const StatusItem = ({ label, status, type }) => (
     </div>
   </div>
 );
+
+
+

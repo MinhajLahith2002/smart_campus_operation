@@ -6,6 +6,8 @@ public record DemoUserResponse(
         String email,
         String campusId,
         String role,
-        String title
+        String title,
+        String phone,
+        boolean available
 ) {
 }

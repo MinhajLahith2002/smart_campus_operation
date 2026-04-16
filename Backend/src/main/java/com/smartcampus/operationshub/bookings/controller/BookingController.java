@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -33,10 +34,20 @@ public class BookingController {
         return bookingService.getBookings(query);
     }
 
+    @GetMapping("/{bookingId}")
+    public BookingResponse getBooking(@PathVariable @org.springframework.lang.NonNull Long bookingId) {
+        return bookingService.getBookingResponse(bookingId);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public BookingResponse createBooking(@Valid @RequestBody CreateBookingRequest request) {
         return bookingService.createBooking(request);
+    }
+
+    @PutMapping("/{bookingId}")
+    public BookingResponse updateBooking(@PathVariable Long bookingId, @Valid @RequestBody CreateBookingRequest request) {
+        return bookingService.updateBooking(bookingId, request);
     }
 
     @PatchMapping("/{bookingId}/approve")
@@ -52,6 +63,11 @@ public class BookingController {
     @PatchMapping("/{bookingId}/cancel")
     public BookingResponse cancel(@PathVariable Long bookingId, @Valid @RequestBody BookingDecisionRequest request) {
         return bookingService.cancelBooking(bookingId, request);
+    }
+
+    @PatchMapping("/{bookingId}/request-cancel")
+    public BookingResponse requestCancellation(@PathVariable Long bookingId, @Valid @RequestBody BookingDecisionRequest request) {
+        return bookingService.requestCancellation(bookingId, request);
     }
 
     @GetMapping("/summary")

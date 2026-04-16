@@ -1,19 +1,23 @@
-# Module C Backend
+# Smart Campus Operations Hub Backend
 
-Spring Boot backend for the Smart Campus Operations Hub maintenance and incident ticketing module.
+Spring Boot backend for the Smart Campus Operations Hub.
 
-## Profiles
-- `dev`: embedded H2 database for local development and default local startup
-- `postgres`: PostgreSQL for the intended project database setup
+## Database behavior
+- If `DB_URL` is not provided, the app falls back to the local in-memory H2 database.
+- If `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` are provided, the app uses that database directly and Hibernate creates/updates tables with `ddl-auto=update`.
+- The optional `postgres` profile is still available for explicit PostgreSQL runs.
 
-## Run locally
+## Run locally with H2
 `./mvnw spring-boot:run`
 
-## Run with PostgreSQL
-1. Create a PostgreSQL database named `smart_campus_module_c`
-2. Set `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` if needed
+## Run with Neon or PostgreSQL
+1. Set `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`
+2. Optional for Neon SSL: include `?sslmode=require` in `DB_URL`
 3. Run:
-   `./mvnw spring-boot:run -Dspring-boot.run.profiles=postgres`
+   `./mvnw spring-boot:run`
+
+Example Neon URL:
+`jdbc:postgresql://ep-xxxx.region.aws.neon.tech/neondb?sslmode=require`
 
 ## Main API Prefix
 `/api/module-c/tickets`

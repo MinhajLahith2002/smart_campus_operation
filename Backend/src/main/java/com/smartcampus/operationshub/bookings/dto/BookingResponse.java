@@ -22,6 +22,8 @@ public record BookingResponse(
         Integer attendees,
         BookingStatus status,
         String rejectionReason,
+        String cancellationRequestNote,
+        OffsetDateTime cancellationRequestedAt,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

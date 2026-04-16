@@ -18,6 +18,8 @@ import com.smartcampus.modulec.dto.TicketResponse;
 import com.smartcampus.modulec.dto.TicketSummaryResponse;
 import com.smartcampus.modulec.dto.UpdateTicketStatusRequest;
 import com.smartcampus.modulec.repository.TicketCommentRepository;
+import com.smartcampus.operationshub.notifications.domain.NotificationType;
+import com.smartcampus.operationshub.notifications.service.NotificationService;
 import com.smartcampus.modulec.repository.TicketRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
@@ -27,6 +29,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,10 +43,12 @@ public class TicketService {
 
     private final TicketRepository ticketRepository;
     private final TicketCommentRepository ticketCommentRepository;
+    private final NotificationService notificationService;
 
-    public TicketService(TicketRepository ticketRepository, TicketCommentRepository ticketCommentRepository) {
+    public TicketService(TicketRepository ticketRepository, TicketCommentRepository ticketCommentRepository, NotificationService notificationService) {
         this.ticketRepository = ticketRepository;
         this.ticketCommentRepository = ticketCommentRepository;
+        this.notificationService = notificationService;
     }
 
     public TicketResponse createTicket(CreateTicketRequest request) {
@@ -51,7 +56,9 @@ public class TicketService {
         validateCreateRequest(request);
 
         Ticket ticket = new Ticket();
-        ticket.setTitle(request.title().trim());
+        String generatedTitle = buildTicketTitle(request);
+        String generatedImpact = buildOperationalImpact(request);
+        ticket.setTitle(generatedTitle);
         ticket.setDescription(request.description().trim());
         ticket.setCategory(request.category());
         ticket.setPriority(request.priority());
@@ -62,9 +69,12 @@ public class TicketService {
         ticket.setReporterRole(request.reporterRole());
         ticket.setResourceName(request.resourceName().trim());
         ticket.setResourceLocation(request.resourceLocation().trim());
+        ticket.setIncidentLocation(request.incidentLocation().trim());
+        ticket.setRelatedBookingId(request.relatedBookingId());
+        ticket.setRelatedBookingLabel(trimToNull(request.relatedBookingLabel()));
         ticket.setResourceType(trimToNull(request.resourceType()));
         ticket.setPreferredContact(trimToNull(request.preferredContact()));
-        ticket.setOperationalImpact(request.operationalImpact().trim());
+        ticket.setOperationalImpact(generatedImpact);
         ticket.setEvidenceNotes(trimToNull(request.evidenceNotes()));
         ticket.setCreatedAt(now);
         ticket.setUpdatedAt(now);
@@ -83,7 +93,9 @@ public class TicketService {
         }
 
         addActivity(ticket, request.reporterName().trim(), request.reporterRole(), "TICKET_CREATED",
-                "Ticket logged with resource, incident description, evidence references, and smart triage context.");
+                request.relatedBookingLabel() == null || request.relatedBookingLabel().isBlank()
+                        ? "Ticket logged with resource, incident description, evidence references, and smart triage context."
+                        : "Ticket logged with booking context: " + request.relatedBookingLabel().trim() + ".");
 
         return map(ticketRepository.save(ticket));
     }
@@ -103,18 +115,72 @@ public class TicketService {
     }
 
     @Transactional(readOnly = true)
-    public TicketResponse getTicket(Long ticketId) {
-        return map(findTicket(ticketId));
+    public TicketResponse getTicket(@NonNull Long ticketId, String requesterId, UserRole requesterRole) {
+        Ticket ticket = findTicket(ticketId);
+        ensureCanView(ticket, requesterId, requesterRole, "You cannot access this ticket.");
+        return map(ticket);
     }
 
-    public TicketResponse assignTechnician(Long ticketId, AssignTechnicianRequest request) {
+    public TicketResponse updateTicket(@NonNull Long ticketId, CreateTicketRequest request) {
+        Ticket ticket = findTicket(ticketId);
+        ensureEditableByReporter(ticket, request.reporterId(), request.reporterRole(), "Only the original reporter can edit an open ticket.");
+        validateCreateRequest(request);
+
+        ticket.setTitle(buildTicketTitle(request));
+        ticket.setDescription(request.description().trim());
+        ticket.setCategory(request.category());
+        ticket.setPriority(request.priority());
+        ticket.setResourceName(request.resourceName().trim());
+        ticket.setResourceLocation(request.resourceLocation().trim());
+        ticket.setIncidentLocation(request.incidentLocation().trim());
+        ticket.setRelatedBookingId(request.relatedBookingId());
+        ticket.setRelatedBookingLabel(trimToNull(request.relatedBookingLabel()));
+        ticket.setResourceType(trimToNull(request.resourceType()));
+        ticket.setPreferredContact(trimToNull(request.preferredContact()));
+        ticket.setOperationalImpact(buildOperationalImpact(request));
+        ticket.setEvidenceNotes(trimToNull(request.evidenceNotes()));
+        ticket.setUpdatedAt(OffsetDateTime.now());
+
+        ticket.getEvidenceItems().clear();
+        if (request.evidenceLabels() != null) {
+            request.evidenceLabels().stream()
+                    .map(String::trim)
+                    .filter(label -> !label.isBlank())
+                    .limit(3)
+                    .forEach(label -> {
+                        TicketEvidence evidence = new TicketEvidence();
+                        evidence.setTicket(ticket);
+                        evidence.setLabel(label);
+                        ticket.getEvidenceItems().add(evidence);
+                    });
+        }
+
+        addActivity(ticket, request.reporterName().trim(), request.reporterRole(), "TICKET_UPDATED",
+                "Reporter updated the ticket details before operational work began.");
+
+        return map(ticketRepository.save(ticket));
+    }
+
+    public void deleteTicket(@NonNull Long ticketId, TicketDecisionRequest request) {
+        Ticket ticket = findTicket(ticketId);
+        ensureEditableByReporter(ticket, request.actorId(), request.actorRole(), "Only the original reporter can delete an open ticket.");
+        ticketRepository.delete(ticket);
+    }
+
+    public TicketResponse assignTechnician(@NonNull Long ticketId, AssignTechnicianRequest request) {
         Ticket ticket = findTicket(ticketId);
         ensureAdmin(request.actorRole(), "Only admins can assign technicians.");
         validateAssignment(request);
 
+        OffsetDateTime now = OffsetDateTime.now();
         ticket.setAssignedTechnicianId(request.technicianId().trim());
         ticket.setAssignedTechnicianName(request.technicianName().trim());
-        ticket.setUpdatedAt(OffsetDateTime.now());
+        ticket.setAssignedByName(fallbackActorName(request.actorName(), "Operations Desk"));
+        ticket.setAssignedAt(now);
+        if (ticket.getStatus() != TicketStatus.RESOLVED && ticket.getStatus() != TicketStatus.CLOSED && ticket.getStatus() != TicketStatus.REJECTED) {
+            ticket.setStatus(TicketStatus.ASSIGNED);
+        }
+        ticket.setUpdatedAt(now);
 
         addActivity(ticket,
                 fallbackActorName(request.actorName(), "Operations Desk"),
@@ -125,7 +191,7 @@ public class TicketService {
         return map(ticketRepository.save(ticket));
     }
 
-    public TicketResponse updateStatus(Long ticketId, UpdateTicketStatusRequest request) {
+    public TicketResponse updateStatus(@NonNull Long ticketId, UpdateTicketStatusRequest request) {
         Ticket ticket = findTicket(ticketId);
         TicketStatus currentStatus = ticket.getStatus();
         TicketStatus nextStatus = request.status();
@@ -143,11 +209,28 @@ public class TicketService {
         }
         ensureTransitionAllowed(currentStatus, nextStatus);
 
+        OffsetDateTime now = OffsetDateTime.now();
         ticket.setStatus(nextStatus);
+        if (nextStatus == TicketStatus.REJECTED) {
+            ticket.setAssignedTechnicianId(null);
+            ticket.setAssignedTechnicianName(null);
+            ticket.setRejectionReason(request.detail().trim());
+            ticket.setRejectedByName(fallbackActorName(request.actorName(), "Module C Desk"));
+            ticket.setRejectedAt(now);
+        }
+        if (nextStatus == TicketStatus.IN_PROGRESS) {
+            ticket.setTechnicianStartedByName(fallbackActorName(request.actorName(), "Assigned Technician"));
+            ticket.setTechnicianStartedAt(now);
+        }
+        if (nextStatus == TicketStatus.RESOLVED) {
+            ticket.setResolvedByName(fallbackActorName(request.actorName(), "Assigned Technician"));
+            ticket.setResolvedAt(now);
+            ticket.setRejectionReason(null);
+        }
         if (!isBlank(request.resolutionNotes())) {
             ticket.setResolutionNotes(request.resolutionNotes().trim());
         }
-        ticket.setUpdatedAt(OffsetDateTime.now());
+        ticket.setUpdatedAt(now);
 
         addActivity(ticket,
                 fallbackActorName(request.actorName(), "Module C Desk"),
@@ -160,15 +243,18 @@ public class TicketService {
         return map(ticketRepository.save(ticket));
     }
 
-    public TicketResponse closeTicket(Long ticketId, TicketDecisionRequest request) {
+    public TicketResponse closeTicket(@NonNull Long ticketId, TicketDecisionRequest request) {
         Ticket ticket = findTicket(ticketId);
-        ensureReporterOrAdmin(ticket, request.actorId(), request.actorRole(), "Only the reporter or an admin can close this ticket.");
+        ensureReporterOnly(ticket, request.actorId(), request.actorRole(), "Only the original reporter can confirm and close this ticket.");
         if (ticket.getStatus() != TicketStatus.RESOLVED) {
             throw new IllegalArgumentException("Only resolved tickets can be closed.");
         }
 
+        OffsetDateTime now = OffsetDateTime.now();
         ticket.setStatus(TicketStatus.CLOSED);
-        ticket.setUpdatedAt(OffsetDateTime.now());
+        ticket.setClosedByName(fallbackActorName(request.actorName(), "Ticket Reporter"));
+        ticket.setClosedAt(now);
+        ticket.setUpdatedAt(now);
         addActivity(ticket,
                 fallbackActorName(request.actorName(), "Ticket Reporter"),
                 request.actorRole(),
@@ -178,9 +264,9 @@ public class TicketService {
         return map(ticketRepository.save(ticket));
     }
 
-    public TicketResponse reopenTicket(Long ticketId, TicketDecisionRequest request) {
+    public TicketResponse reopenTicket(@NonNull Long ticketId, TicketDecisionRequest request) {
         Ticket ticket = findTicket(ticketId);
-        ensureReporterOrAdmin(ticket, request.actorId(), request.actorRole(), "Only the reporter or an admin can reopen this ticket.");
+        ensureReporterOnly(ticket, request.actorId(), request.actorRole(), "Only the original reporter can reopen this ticket.");
         if (ticket.getStatus() != TicketStatus.RESOLVED) {
             throw new IllegalArgumentException("Only resolved tickets can be reopened.");
         }
@@ -199,7 +285,7 @@ public class TicketService {
         return map(ticketRepository.save(ticket));
     }
 
-    public TicketCommentResponse addComment(Long ticketId, TicketCommentRequest request) {
+    public TicketCommentResponse addComment(@NonNull Long ticketId, TicketCommentRequest request) {
         Ticket ticket = findTicket(ticketId);
         ensureCanView(ticket, request.actorId(), request.actorRole(), "You cannot comment on this ticket.");
         ensureCommentable(ticket);
@@ -223,7 +309,7 @@ public class TicketService {
         return mapComment(savedComment);
     }
 
-    public TicketCommentResponse updateComment(Long commentId, TicketCommentRequest request) {
+    public TicketCommentResponse updateComment(@NonNull Long commentId, TicketCommentRequest request) {
         TicketComment comment = findComment(commentId);
         Ticket ticket = comment.getTicket();
         ensureCommentable(ticket);
@@ -243,7 +329,7 @@ public class TicketService {
         return mapComment(comment);
     }
 
-    public void deleteComment(Long commentId, TicketDecisionRequest request) {
+    public void deleteComment(@NonNull Long commentId, TicketDecisionRequest request) {
         TicketComment comment = findComment(commentId);
         Ticket ticket = comment.getTicket();
         ensureCanView(ticket, request.actorId(), request.actorRole(), "You cannot moderate this ticket discussion.");
@@ -276,12 +362,12 @@ public class TicketService {
         );
     }
 
-    private Ticket findTicket(Long ticketId) {
+    private Ticket findTicket(@NonNull Long ticketId) {
         return ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new EntityNotFoundException("Ticket " + ticketId + " was not found."));
     }
 
-    private TicketComment findComment(Long commentId) {
+    private TicketComment findComment(@NonNull Long commentId) {
         return ticketCommentRepository.findById(commentId)
                 .orElseThrow(() -> new EntityNotFoundException("Comment " + commentId + " was not found."));
     }
@@ -291,7 +377,13 @@ public class TicketService {
             return true;
         }
         if (query.requesterRole() == UserRole.TECHNICIAN) {
-            return query.requesterId() == null || query.requesterId().equals(ticket.getAssignedTechnicianId());
+            boolean matchesTechnician = query.requesterId() == null || query.requesterId().equals(ticket.getAssignedTechnicianId());
+            if (!matchesTechnician) {
+                return false;
+            }
+            return ticket.getStatus() != TicketStatus.REJECTED
+                    && ticket.getStatus() != TicketStatus.CLOSED
+                    && ticket.getStatus() != TicketStatus.RESOLVED;
         }
         return query.requesterId() != null && query.requesterId().equals(ticket.getReporterId());
     }
@@ -302,12 +394,24 @@ public class TicketService {
         }
     }
 
-    private void ensureReporterOrAdmin(Ticket ticket, String actorId, UserRole actorRole, String message) {
-        if (actorRole == UserRole.ADMIN) {
-            return;
+    private void ensureReporterOnly(Ticket ticket, String actorId, UserRole actorRole, String message) {
+        if (actorRole != ticket.getReporterRole()) {
+            throw new SecurityException(message);
         }
         if (actorId == null || !actorId.equals(ticket.getReporterId())) {
             throw new SecurityException(message);
+        }
+    }
+
+    private void ensureEditableByReporter(Ticket ticket, String actorId, UserRole actorRole, String message) {
+        if (actorRole != UserRole.STUDENT && actorRole != UserRole.STAFF) {
+            throw new SecurityException(message);
+        }
+        if (actorId == null || !actorId.equals(ticket.getReporterId())) {
+            throw new SecurityException(message);
+        }
+        if (ticket.getStatus() != TicketStatus.OPEN) {
+            throw new IllegalArgumentException("Only open tickets can be edited or deleted.");
         }
     }
 
@@ -326,10 +430,13 @@ public class TicketService {
 
     private void ensureStatusPermission(Ticket ticket, String actorId, UserRole actorRole, TicketStatus nextStatus) {
         if (actorRole == UserRole.ADMIN) {
+            if (nextStatus != TicketStatus.REJECTED) {
+                throw new SecurityException("Admins can only reject tickets. Assignment is the admin workflow action for active cases.");
+            }
             return;
         }
         if (actorRole != UserRole.TECHNICIAN) {
-            throw new SecurityException("Only admins or the assigned technician can update ticket workflow.");
+            throw new SecurityException("Only the assigned technician can move active ticket work forward.");
         }
         if (actorId == null || !actorId.equals(ticket.getAssignedTechnicianId())) {
             throw new SecurityException("Only the assigned technician can update this ticket.");
@@ -341,8 +448,7 @@ public class TicketService {
 
     private void ensureTransitionAllowed(TicketStatus currentStatus, TicketStatus nextStatus) {
         boolean allowed = switch (currentStatus) {
-            case OPEN -> nextStatus == TicketStatus.IN_PROGRESS || nextStatus == TicketStatus.REJECTED;
-            case TRIAGED, ASSIGNED -> nextStatus == TicketStatus.IN_PROGRESS || nextStatus == TicketStatus.REJECTED;
+            case OPEN, TRIAGED, ASSIGNED -> nextStatus == TicketStatus.IN_PROGRESS || nextStatus == TicketStatus.REJECTED;
             case IN_PROGRESS -> nextStatus == TicketStatus.RESOLVED || nextStatus == TicketStatus.REJECTED;
             default -> false;
         };
@@ -353,17 +459,16 @@ public class TicketService {
     }
 
     private void validateCreateRequest(CreateTicketRequest request) {
-        if (request.title().trim().length() < 8) {
-            throw new IllegalArgumentException("Ticket title must be at least 8 characters.");
-        }
+
         if (request.description().trim().length() < 30) {
             throw new IllegalArgumentException("Incident description must be at least 30 characters.");
         }
-        if (request.operationalImpact() == null || request.operationalImpact().trim().length() < 12) {
-            throw new IllegalArgumentException("Operational impact must be at least 12 characters.");
-        }
+
         if (request.preferredContact() == null || request.preferredContact().trim().isBlank()) {
             throw new IllegalArgumentException("Preferred contact is required.");
+        }
+        if (request.incidentLocation() == null || request.incidentLocation().trim().length() < 6) {
+            throw new IllegalArgumentException("Incident location must be at least 6 characters.");
         }
         if (request.evidenceLabels() != null) {
             if (request.evidenceLabels().size() > 3) {
@@ -386,11 +491,35 @@ public class TicketService {
         }
 
         TicketPriority suggestedPriority = deriveSuggestedPriority(
-                request.title(), request.description(), request.operationalImpact(), request.category().name(),
+                buildTicketTitle(request), request.description(), buildOperationalImpact(request), request.category().name(),
                 request.evidenceLabels() == null ? 0 : (int) request.evidenceLabels().stream().filter(Objects::nonNull).map(String::trim).filter(label -> !label.isBlank()).count());
         if (priorityRank(request.priority()) + 1 < priorityRank(suggestedPriority)) {
             throw new IllegalArgumentException("The incident language suggests at least " + suggestedPriority.name() + " priority. Increase the selected priority or reduce the urgency wording.");
         }
+    }
+
+    private String buildTicketTitle(CreateTicketRequest request) {
+        if (!isBlank(request.title())) {
+            return request.title().trim();
+        }
+
+        if (!isBlank(request.relatedBookingLabel())) {
+            return "Issue affecting " + request.relatedBookingLabel().trim();
+        }
+
+        return "Issue affecting " + request.resourceName().trim();
+    }
+
+    private String buildOperationalImpact(CreateTicketRequest request) {
+        if (!isBlank(request.operationalImpact())) {
+            return request.operationalImpact().trim();
+        }
+
+        if (!isBlank(request.relatedBookingLabel())) {
+            return "Booking session disrupted at " + request.incidentLocation().trim();
+        }
+
+        return "Campus asset issue reported at " + request.incidentLocation().trim();
     }
 
     private void validateAssignment(AssignTechnicianRequest request) {
@@ -459,11 +588,25 @@ public class TicketService {
                 ticket.getAssignedTechnicianName(),
                 ticket.getResourceName(),
                 ticket.getResourceLocation(),
+                ticket.getIncidentLocation(),
+                ticket.getRelatedBookingId(),
+                ticket.getRelatedBookingLabel(),
                 ticket.getResourceType(),
                 ticket.getPreferredContact(),
                 ticket.getOperationalImpact(),
                 ticket.getEvidenceNotes(),
                 ticket.getResolutionNotes(),
+                ticket.getRejectionReason(),
+                ticket.getAssignedByName(),
+                ticket.getAssignedAt(),
+                ticket.getTechnicianStartedByName(),
+                ticket.getTechnicianStartedAt(),
+                ticket.getResolvedByName(),
+                ticket.getResolvedAt(),
+                ticket.getClosedByName(),
+                ticket.getClosedAt(),
+                ticket.getRejectedByName(),
+                ticket.getRejectedAt(),
                 ticket.getCreatedAt(),
                 ticket.getUpdatedAt(),
                 ticket.getEvidenceItems().stream().map(TicketEvidence::getLabel).toList(),
@@ -570,3 +713,9 @@ public class TicketService {
         return isBlank(value) ? null : value.trim();
     }
 }
+
+
+
+
+
+

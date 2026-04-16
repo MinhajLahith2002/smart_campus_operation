@@ -8,6 +8,7 @@ import com.smartcampus.operationshub.resources.dto.ResourceSummaryResponse;
 import com.smartcampus.operationshub.resources.repository.ResourceAssetRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +29,7 @@ public class ResourceService {
         return resources.stream().map(this::map).toList();
     }
 
-    public ResourceResponse getResource(Long resourceId) {
+    public ResourceResponse getResource(@NonNull Long resourceId) {
         return map(resourceAssetRepository.findById(resourceId)
                 .orElseThrow(() -> new EntityNotFoundException("Resource " + resourceId + " was not found.")));
     }

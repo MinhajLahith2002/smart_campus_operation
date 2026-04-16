@@ -9,6 +9,7 @@ import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +35,7 @@ public class NotificationService {
         return notifications.stream().sorted(Comparator.comparing(NotificationEvent::getCreatedAt).reversed()).map(this::map).toList();
     }
 
-    public NotificationResponse markRead(Long notificationId) {
+    public NotificationResponse markRead(@NonNull Long notificationId) {
         NotificationEvent event = notificationEventRepository.findById(notificationId)
                 .orElseThrow(() -> new EntityNotFoundException("Notification " + notificationId + " was not found."));
         event.setRead(true);
