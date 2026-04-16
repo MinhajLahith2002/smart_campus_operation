@@ -55,24 +55,13 @@ export const MyBookings = () => {
     outcomes: bookings.filter((booking) => ['REJECTED', 'CANCELLED'].includes(booking.status)).length,
   }), [bookings]);
 
-  const handleCancel = async (bookingId) => {
-    try {
-      setBusyBookingId(bookingId);
-      await cancelBooking(bookingId, {
-        actorId: user.id,
-        actorName: user.name,
-        actorRole: toBackendRole(user.role),
-        note: 'Booking cancelled by requester.',
-      });
-      await loadData();
-      if (selectedBooking?.id === bookingId) {
-        setSelectedBooking(null);
-      }
-    } catch (err) {
-      setError(err.message || 'Unable to cancel this booking.');
-    } finally {
-      setBusyBookingId(null);
-    }
+  const isWithin24Hours = (createdAt) => {
+    if (!createdAt) return false;
+    const created = new Date(createdAt);
+    const now = new Date();
+    const diffInMs = now - created;
+    const diffInHours = diffInMs / (1000 * 60 * 60);
+    return diffInHours < 24;
   };
 
   const handleRequestCancellation = async (bookingId) => {
@@ -195,12 +184,12 @@ export const MyBookings = () => {
                       </div>
 
                       <div className="flex flex-wrap gap-3">
-                        {booking.status === 'PENDING' && (
+                        {booking.status === 'PENDING' && isWithin24Hours(booking.createdAt) && !booking.cancellationRequestedAt && (
                           <>
                             <Button
                               variant="outline"
                               className="gap-2"
-                              onClick={() => navigate(`/bookings/request?resourceId=${booking.resourceId}&editId=${booking.id}`)}
+                              onClick={() => navigate(`/bookings/new?resourceId=${booking.resourceId}&editId=${booking.id}`)}
                             >
                               Edit
                             </Button>
@@ -208,21 +197,11 @@ export const MyBookings = () => {
                               variant="outline"
                               className="gap-2 border-danger/20 text-danger hover:bg-danger/10"
                               isLoading={busyBookingId === booking.id}
-                              onClick={() => handleCancel(booking.id)}
+                              onClick={() => handleRequestCancellation(booking.id)}
                             >
                               <XCircle size={16} /> Cancel Request
                             </Button>
                           </>
-                        )}
-                        {booking.status === 'APPROVED' && !booking.cancellationRequestedAt && (
-                          <Button
-                            variant="outline"
-                            className="gap-2 border-danger/20 text-danger hover:bg-danger/10"
-                            isLoading={busyBookingId === booking.id}
-                            onClick={() => handleRequestCancellation(booking.id)}
-                          >
-                            <XCircle size={16} /> Request Cancellation
-                          </Button>
                         )}
                         <Button variant="ghost" className="gap-2" onClick={() => setSelectedBooking(booking)}>View Details</Button>
                       </div>
@@ -276,12 +255,12 @@ export const MyBookings = () => {
             )}
 
             <div className="mt-6 flex justify-end gap-3">
-              {selectedBooking.status === 'PENDING' && (
+              {selectedBooking.status === 'PENDING' && isWithin24Hours(selectedBooking.createdAt) && !selectedBooking.cancellationRequestedAt && (
                 <>
                   <Button
                     variant="outline"
                     className="gap-2"
-                    onClick={() => navigate(`/bookings/request?resourceId=${selectedBooking.resourceId}&editId=${selectedBooking.id}`)}
+                    onClick={() => navigate(`/bookings/new?resourceId=${selectedBooking.resourceId}&editId=${selectedBooking.id}`)}
                   >
                     Edit Request
                   </Button>
@@ -289,21 +268,11 @@ export const MyBookings = () => {
                     variant="outline"
                     className="gap-2 border-danger/20 text-danger hover:bg-danger/10"
                     isLoading={busyBookingId === selectedBooking.id}
-                    onClick={() => handleCancel(selectedBooking.id)}
+                    onClick={() => handleRequestCancellation(selectedBooking.id)}
                   >
                     <XCircle size={16} /> Cancel Request
                   </Button>
                 </>
-              )}
-              {selectedBooking.status === 'APPROVED' && !selectedBooking.cancellationRequestedAt && (
-                <Button
-                  variant="outline"
-                  className="gap-2 border-danger/20 text-danger hover:bg-danger/10"
-                  isLoading={busyBookingId === selectedBooking.id}
-                  onClick={() => handleRequestCancellation(selectedBooking.id)}
-                >
-                  <XCircle size={16} /> Request Cancellation
-                </Button>
               )}
               <Button onClick={() => setSelectedBooking(null)}>Close</Button>
             </div>

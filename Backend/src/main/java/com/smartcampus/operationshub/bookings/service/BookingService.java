@@ -81,6 +81,9 @@ public class BookingService {
         if (booking.getStatus() != BookingStatus.PENDING) {
             throw new IllegalArgumentException("Only pending bookings can be edited before admin review.");
         }
+        if (!isWithin24Hours(booking)) {
+            throw new IllegalArgumentException("Bookings can only be edited within 24 hours of creation.");
+        }
         if (request.requesterRole() != booking.getRequesterRole() || !booking.getRequesterId().equals(request.requesterId())) {
             throw new SecurityException("Only the original requester can edit this pending booking.");
         }
@@ -158,8 +161,8 @@ public class BookingService {
             if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.APPROVED) {
                 throw new IllegalArgumentException("Admins can only cancel pending or approved bookings.");
             }
-        } else if (booking.getStatus() != BookingStatus.PENDING) {
-            throw new IllegalArgumentException("Only pending bookings can be cancelled directly by the requester.");
+        } else {
+            throw new SecurityException("Direct cancellation is no longer permitted for requesters. Please use 'Request Cancellation' with a reason.");
         }
 
         booking.setStatus(BookingStatus.CANCELLED);
@@ -179,8 +182,11 @@ public class BookingService {
         if (!booking.getRequesterId().equals(request.actorId()) || request.actorRole() != booking.getRequesterRole()) {
             throw new SecurityException("Only the original requester can ask admin to cancel an approved booking.");
         }
-        if (booking.getStatus() != BookingStatus.APPROVED) {
-            throw new IllegalArgumentException("Only approved bookings can send an admin cancellation request.");
+        if (booking.getStatus() != BookingStatus.APPROVED && booking.getStatus() != BookingStatus.PENDING) {
+            throw new IllegalArgumentException("Only approved or pending bookings can send a cancellation request.");
+        }
+        if (!isWithin24Hours(booking)) {
+            throw new IllegalArgumentException("Cancellation requests can only be sent within 24 hours of booking creation.");
         }
         if (request.note() == null || request.note().trim().length() < 8) {
             throw new IllegalArgumentException("A clear cancellation request message is required.");
@@ -209,13 +215,18 @@ public class BookingService {
                 bookingRecordRepository.countByStatus(BookingStatus.PENDING),
                 bookingRecordRepository.countByStatus(BookingStatus.APPROVED),
                 bookingRecordRepository.countByStatus(BookingStatus.REJECTED),
-                bookingRecordRepository.countByStatus(BookingStatus.CANCELLED)
+                bookingRecordRepository.countByStatus(BookingStatus.CANCELLED),
+                bookingRecordRepository.countByCancellationRequestedAtIsNotNull()
         );
     }
 
     @Transactional(readOnly = true)
     public BookingResponse getBookingResponse(@NonNull Long bookingId) {
         return map(findBooking(bookingId));
+    }
+
+    private boolean isWithin24Hours(BookingRecord booking) {
+        return OffsetDateTime.now().isBefore(booking.getCreatedAt().plusHours(24));
     }
 
     private BookingRecord findBooking(@NonNull Long bookingId) {

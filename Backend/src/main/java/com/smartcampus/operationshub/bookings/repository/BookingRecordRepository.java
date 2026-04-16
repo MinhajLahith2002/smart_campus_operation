@@ -10,4 +10,5 @@ public interface BookingRecordRepository extends JpaRepository<BookingRecord, Lo
     List<BookingRecord> findByRequesterIdOrderByCreatedAtDesc(String requesterId);
     List<BookingRecord> findByBookingDateAndResourceId(LocalDate bookingDate, Long resourceId);
     long countByStatus(BookingStatus status);
+    long countByCancellationRequestedAtIsNotNull();
 }
