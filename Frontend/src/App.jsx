@@ -13,8 +13,10 @@ import { AuthPage } from './pages/AuthPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { AdminBookingsPage } from './pages/AdminBookingsPage';
 import { AdminTicketsPage } from './pages/AdminTicketsPage';
+import { AdminResourcesPage } from './pages/AdminResourcesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ReportIssuePage } from './pages/ReportIssuePage';
+import { ResourceDetailPage } from './pages/ResourceDetailPage';
 import { TicketDetailPage } from './pages/TicketDetailPage';
 import { TechnicianTicketsPage } from './pages/TechnicianTicketsPage';
 
@@ -56,6 +58,7 @@ export default function App() {
 
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/catalogue" element={<ProtectedRoute><Catalogue /></ProtectedRoute>} />
+            <Route path="/catalogue/:resourceId" element={<ProtectedRoute><ResourceDetailPage /></ProtectedRoute>} />
             <Route path="/bookings/my" element={<ProtectedRoute><MyBookings /></ProtectedRoute>} />
             <Route path="/bookings/new" element={<ProtectedRoute><BookingRequest /></ProtectedRoute>} />
 
@@ -67,6 +70,7 @@ export default function App() {
 
             <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
             <Route path="/admin/bookings" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminBookingsPage /></RoleRoute></ProtectedRoute>} />
+            <Route path="/admin/resources" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminResourcesPage /></RoleRoute></ProtectedRoute>} />
             <Route path="/admin/tickets" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminTicketsPage /></RoleRoute></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
