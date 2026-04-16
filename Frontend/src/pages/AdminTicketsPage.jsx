@@ -4,6 +4,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { AlertTriangle, ArrowRight, Clock3, MapPin, Paperclip, ShieldAlert, UserRoundCog, Wrench, X } from 'lucide-react';
 import { Card, Badge, Button, Input } from '../components/ui/Primitives';
 import { assignTechnician, getTicketSummary, getTickets, updateTicketStatus, toBackendRole } from '../lib/moduleCApi';
+import { getAdminUsers } from '../lib/authApi';
 import { useAuth } from '../context/AuthContext';
 
 const statusOptions = ['IN_PROGRESS', 'RESOLVED', 'REJECTED'];
@@ -16,9 +17,10 @@ export const AdminTicketsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
+  const [technicians, setTechnicians] = useState([]);
   const [assigningTicket, setAssigningTicket] = useState(null);
   const [statusTicket, setStatusTicket] = useState(null);
-  const [assignForm, setAssignForm] = useState({ technicianId: 'tech-17', technicianName: 'Kasun Silva' });
+  const [assignForm, setAssignForm] = useState({ technicianId: '' });
   const [statusForm, setStatusForm] = useState({ status: 'IN_PROGRESS', resolutionNotes: '', detail: '' });
   const [saving, setSaving] = useState(false);
   const [filters, setFilters] = useState({ status: 'ALL', priority: 'ALL', category: 'ALL' });
@@ -27,12 +29,14 @@ export const AdminTicketsPage = () => {
     try {
       setLoading(true);
       setError('');
-      const [ticketData, summaryData] = await Promise.all([
+      const [ticketData, summaryData, technicianData] = await Promise.all([
         getTickets({ role: user?.role, userId: user?.id }),
         getTicketSummary(),
+        getAdminUsers({ role: 'TECHNICIAN', status: 'ACTIVE' }),
       ]);
       setTickets(ticketData);
       setSummary(summaryData);
+      setTechnicians(technicianData);
     } catch (err) {
       setError(err.message || 'Unable to load the incident desk.');
     } finally {
@@ -59,8 +63,7 @@ export const AdminTicketsPage = () => {
     setStatusTicket(null);
     setAssigningTicket(ticket);
     setAssignForm({
-      technicianId: ticket.assignedTechnicianId || 'tech-17',
-      technicianName: ticket.assignedTechnicianName || 'Kasun Silva',
+      technicianId: ticket.assignedTechnicianId || technicians[0]?.id || '',
     });
   };
 
@@ -88,9 +91,10 @@ export const AdminTicketsPage = () => {
     try {
       setSaving(true);
       setActionError('');
+      const selectedTechnician = technicians.find((item) => item.id === assignForm.technicianId);
       await assignTechnician(assigningTicket.id, {
         technicianId: assignForm.technicianId,
-        technicianName: assignForm.technicianName,
+        technicianName: selectedTechnician?.fullName || '',
         actorId: user.id,
         actorName: user.name,
         actorRole: toBackendRole(user.role),
@@ -182,12 +186,15 @@ export const AdminTicketsPage = () => {
               </div>
               <form className="space-y-4" onSubmit={handleAssignSubmit}>
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Technician ID</label>
-                  <Input value={assignForm.technicianId} onChange={(event) => setAssignForm((current) => ({ ...current, technicianId: event.target.value }))} required />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium">Technician name</label>
-                  <Input value={assignForm.technicianName} onChange={(event) => setAssignForm((current) => ({ ...current, technicianName: event.target.value }))} required />
+                  <label className="mb-2 block text-sm font-medium">Technician account</label>
+                  <select className="flex h-11 w-full rounded-xl border border-border bg-white/45 px-3 py-2 text-sm dark:bg-white/5" value={assignForm.technicianId} onChange={(event) => setAssignForm({ technicianId: event.target.value })} required>
+                    <option value="">Select technician</option>
+                    {technicians.map((technician) => (
+                      <option key={technician.id} value={technician.id}>
+                        {technician.fullName} - {technician.email}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex gap-3">
                   <Button type="submit" className="gap-2" isLoading={saving}><ShieldAlert size={16} /> Confirm assignment</Button>

@@ -14,6 +14,7 @@ import {
   Ticket,
   Radar,
   Activity,
+  UserCog,
   Wrench,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -86,6 +87,7 @@ export const AppShell = ({ children }) => {
     ? [
         { to: '/admin/bookings', icon: ShieldCheck, label: 'Booking Desk', hint: 'Operational queue' },
         { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Assign and triage' },
+        { to: '/admin/users', icon: UserCog, label: 'User Access', hint: 'Roles, status, invites' },
       ]
     : [];
 
