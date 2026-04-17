@@ -120,7 +120,7 @@ class AuthControllerIntegrationTest {
                                   "email":"StudentFlow@Campus.edu",
                                   "password":"Password@123",
                                   "confirmPassword":"Password@123",
-                                  "studentId":" it20240002 ",
+                                  "studentId":" it24830002 ",
                                   "faculty":" information technology ",
                                   "batch":"2024",
                                   "campus":" Malabe ",
@@ -237,7 +237,7 @@ class AuthControllerIntegrationTest {
                         .content("""
                                 {
                                   "fullName":"Google Student",
-                                  "studentId":"IT20240003",
+                                  "studentId":"IT24830003",
                                   "faculty":"IT",
                                   "batch":"2024",
                                   "campus":"malabe",
@@ -292,7 +292,7 @@ class AuthControllerIntegrationTest {
     @Test
     void duplicateStudentIdIsRejectedWithFieldError() throws Exception {
         AuthUser existing = saveUser("student-2", "existing@campus.edu", UserRole.STUDENT, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
-        existing.setStudentId("IT20240001");
+        existing.setStudentId("IT24830001");
         authUserRepository.save(existing);
 
         mockMvc.perform(post("/api/auth/register")
@@ -303,7 +303,7 @@ class AuthControllerIntegrationTest {
                                   "email":"new@campus.edu",
                                   "password":"Password@123",
                                   "confirmPassword":"Password@123",
-                                  "studentId":"IT20240001",
+                                  "studentId":"IT24830001",
                                   "faculty":"IT",
                                   "batch":"2024",
                                   "campus":"malabe",
@@ -476,6 +476,80 @@ class AuthControllerIntegrationTest {
                                 """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message", is("This account is currently disabled.")));
+    }
+
+    @Test
+    void adminCanUseForgotPasswordAndLoginWithUpdatedPassword() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@campus.edu"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("If an account exists for that email, a password reset link has been sent.")));
+
+        ArgumentCaptor<String> resetLinkCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authMailService).sendPasswordResetEmail(any(), resetLinkCaptor.capture());
+        String resetToken = extractToken(resetLinkCaptor.getValue());
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token":"%s",
+                                  "password":"AdminReset@123",
+                                  "confirmPassword":"AdminReset@123"
+                                }
+                                """.formatted(resetToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("Your password has been updated.")));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@campus.edu","password":"AdminReset@123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role", is("ADMIN")))
+                .andExpect(jsonPath("$.user.authProviderType", is("LOCAL")));
+    }
+
+    @Test
+    void activeTechnicianCanUseForgotPasswordAndLoginWithUpdatedPassword() throws Exception {
+        saveUser("tech-reset", "tech.reset@campus.edu", UserRole.TECHNICIAN, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"tech.reset@campus.edu"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("If an account exists for that email, a password reset link has been sent.")));
+
+        ArgumentCaptor<String> resetLinkCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authMailService).sendPasswordResetEmail(any(), resetLinkCaptor.capture());
+        String resetToken = extractToken(resetLinkCaptor.getValue());
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token":"%s",
+                                  "password":"TechReset@123",
+                                  "confirmPassword":"TechReset@123"
+                                }
+                                """.formatted(resetToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("Your password has been updated.")));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"tech.reset@campus.edu","password":"TechReset@123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role", is("TECHNICIAN")))
+                .andExpect(jsonPath("$.user.authProviderType", is("LOCAL")));
     }
 
     @Test

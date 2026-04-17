@@ -74,7 +74,7 @@ class AuthBootstrapConfigTest {
         properties.getSampleUsers().getStudent().setEmail("student@campus.edu");
         properties.getSampleUsers().getStudent().setPassword("Student@123");
         properties.getSampleUsers().getStudent().setFullName("Sample Student");
-        properties.getSampleUsers().getStudent().setStudentId("IT20240001");
+        properties.getSampleUsers().getStudent().setStudentId("IT24240001");
         properties.getSampleUsers().getStudent().setFaculty("IT");
         properties.getSampleUsers().getStudent().setBatch("2024");
         properties.getSampleUsers().getStudent().setCampus("malabe");
@@ -94,7 +94,7 @@ class AuthBootstrapConfigTest {
         assertEquals(UserRole.STUDENT, student.getRole());
         assertEquals(AccountStatus.ACTIVE, student.getStatus());
         assertEquals(AuthProviderType.LOCAL, student.getAuthProviderType());
-        assertEquals("IT20240001", student.getStudentId());
+        assertEquals("IT24240001", student.getStudentId());
         assertEquals("IT", student.getFaculty());
         assertTrue(passwordEncoder.matches("Student@123", student.getPasswordHash()));
 
