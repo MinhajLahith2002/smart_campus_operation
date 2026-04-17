@@ -1,6 +1,6 @@
 import { toBackendRole } from './moduleCApi';
 
-export const MODULE_A_API_BASE = import.meta.env.VITE_MODULE_A_API_URL || 'http://127.0.0.1:8081/api/module-a/resources';
+export const MODULE_A_API_BASE = import.meta.env.VITE_MODULE_A_API_URL || 'http://127.0.0.1:8082/api/module-a/resources';
 export const RESOURCE_TYPES = ['LAB', 'HALL', 'MEETING_ROOM', 'EQUIPMENT'];
 export const RESOURCE_STATUSES = ['ACTIVE', 'OUT_OF_SERVICE'];
 export const RESOURCE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
