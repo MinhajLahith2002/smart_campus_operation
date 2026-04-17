@@ -1,6 +1,6 @@
 package com.smartcampus.operationshub.bookings.dto;
 
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.Max;

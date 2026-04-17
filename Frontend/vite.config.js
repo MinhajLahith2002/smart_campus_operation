@@ -14,6 +14,18 @@ export default defineConfig(({mode}) => {
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('react-dom') || id.includes(`${path.sep}react${path.sep}`)) return 'react-vendor';
+            if (id.includes('lucide-react') || id.includes(`${path.sep}motion${path.sep}`)) return 'ui-vendor';
+            return 'vendor';
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

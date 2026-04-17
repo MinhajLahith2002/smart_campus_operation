@@ -1,6 +1,6 @@
 package com.smartcampus.modulec.controller;
 
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import com.smartcampus.modulec.dto.AssignTechnicianRequest;
 import com.smartcampus.modulec.dto.CreateTicketRequest;
 import com.smartcampus.modulec.dto.TicketCommentRequest;
@@ -10,12 +10,14 @@ import com.smartcampus.modulec.dto.TicketQuery;
 import com.smartcampus.modulec.dto.TicketResponse;
 import com.smartcampus.modulec.dto.TicketSummaryResponse;
 import com.smartcampus.modulec.dto.UpdateTicketStatusRequest;
+import com.smartcampus.operationshub.auth.security.AuthUserPrincipal;
 import com.smartcampus.modulec.service.TicketService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -40,69 +42,85 @@ public class TicketController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TicketResponse createTicket(@Valid @RequestBody CreateTicketRequest request) {
-        return ticketService.createTicket(request);
+    public TicketResponse createTicket(@Valid @RequestBody CreateTicketRequest request,
+                                       @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.createTicket(request, principal);
     }
 
     @GetMapping
-    public List<TicketResponse> getTickets(@Valid TicketQuery query) {
-        return ticketService.getTickets(query);
+    public List<TicketResponse> getTickets(@Valid TicketQuery query,
+                                           @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.getTickets(query, principal);
     }
 
     @GetMapping("/{ticketId}")
-    public TicketResponse getTicket(
-            @PathVariable Long ticketId,
-            @RequestParam @NotNull UserRole requesterRole,
-            @RequestParam(required = false) @Size(max = 80) String requesterId) {
-        return ticketService.getTicket(ticketId, requesterId, requesterRole);
+    public TicketResponse getTicket(@PathVariable Long ticketId,
+                                    @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.getTicket(ticketId, principal);
     }
 
     @PutMapping("/{ticketId}")
-    public TicketResponse updateTicket(@PathVariable Long ticketId, @Valid @RequestBody CreateTicketRequest request) {
-        return ticketService.updateTicket(ticketId, request);
+    public TicketResponse updateTicket(@PathVariable Long ticketId, @Valid @RequestBody CreateTicketRequest request,
+                                       @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.updateTicket(ticketId, request, principal);
     }
 
     @DeleteMapping("/{ticketId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteTicket(@PathVariable Long ticketId, @Valid @RequestBody TicketDecisionRequest request) {
-        ticketService.deleteTicket(ticketId, request);
+    public void deleteTicket(@PathVariable Long ticketId, @Valid @RequestBody TicketDecisionRequest request,
+                             @AuthenticationPrincipal AuthUserPrincipal principal) {
+        ticketService.deleteTicket(ticketId, request, principal);
     }
 
     @PatchMapping("/{ticketId}/assign")
-    public TicketResponse assignTechnician(@PathVariable Long ticketId, @Valid @RequestBody AssignTechnicianRequest request) {
-        return ticketService.assignTechnician(ticketId, request);
+    public TicketResponse assignTechnician(@PathVariable Long ticketId,
+                                           @Valid @RequestBody AssignTechnicianRequest request,
+                                           @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.assignTechnician(ticketId, request, principal);
     }
 
     @PatchMapping("/{ticketId}/status")
-    public TicketResponse updateStatus(@PathVariable Long ticketId, @Valid @RequestBody UpdateTicketStatusRequest request) {
-        return ticketService.updateStatus(ticketId, request);
+    public TicketResponse updateStatus(@PathVariable Long ticketId,
+                                       @Valid @RequestBody UpdateTicketStatusRequest request,
+                                       @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.updateStatus(ticketId, request, principal);
     }
 
     @PatchMapping("/{ticketId}/close")
-    public TicketResponse closeTicket(@PathVariable Long ticketId, @Valid @RequestBody TicketDecisionRequest request) {
-        return ticketService.closeTicket(ticketId, request);
+    public TicketResponse closeTicket(@PathVariable Long ticketId,
+                                      @Valid @RequestBody TicketDecisionRequest request,
+                                      @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.closeTicket(ticketId, request, principal);
     }
 
     @PatchMapping("/{ticketId}/reopen")
-    public TicketResponse reopenTicket(@PathVariable Long ticketId, @Valid @RequestBody TicketDecisionRequest request) {
-        return ticketService.reopenTicket(ticketId, request);
+    public TicketResponse reopenTicket(@PathVariable Long ticketId,
+                                       @Valid @RequestBody TicketDecisionRequest request,
+                                       @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.reopenTicket(ticketId, request, principal);
     }
 
     @PostMapping("/{ticketId}/comments")
     @ResponseStatus(HttpStatus.CREATED)
-    public TicketCommentResponse addComment(@PathVariable Long ticketId, @Valid @RequestBody TicketCommentRequest request) {
-        return ticketService.addComment(ticketId, request);
+    public TicketCommentResponse addComment(@PathVariable Long ticketId,
+                                            @Valid @RequestBody TicketCommentRequest request,
+                                            @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.addComment(ticketId, request, principal);
     }
 
     @PutMapping("/comments/{commentId}")
-    public TicketCommentResponse updateComment(@PathVariable Long commentId, @Valid @RequestBody TicketCommentRequest request) {
-        return ticketService.updateComment(commentId, request);
+    public TicketCommentResponse updateComment(@PathVariable Long commentId,
+                                               @Valid @RequestBody TicketCommentRequest request,
+                                               @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.updateComment(commentId, request, principal);
     }
 
     @DeleteMapping("/comments/{commentId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteComment(@PathVariable Long commentId, @Valid @RequestBody TicketDecisionRequest request) {
-        ticketService.deleteComment(commentId, request);
+    public void deleteComment(@PathVariable Long commentId,
+                              @Valid @RequestBody TicketDecisionRequest request,
+                              @AuthenticationPrincipal AuthUserPrincipal principal) {
+        ticketService.deleteComment(commentId, request, principal);
     }
 
     @GetMapping("/summary")

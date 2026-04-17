@@ -3,7 +3,7 @@ package com.smartcampus.modulec.dto;
 import com.smartcampus.modulec.domain.TicketCategory;
 import com.smartcampus.modulec.domain.TicketPriority;
 import com.smartcampus.modulec.domain.TicketStatus;
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import java.time.OffsetDateTime;
 import java.util.List;
 

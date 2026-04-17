@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+
 import { Card, Badge, Button } from '../components/ui/Primitives';
 import { Calendar, Clock, Info, MapPin, Users, XCircle, X } from 'lucide-react';
 import { format } from 'date-fns';

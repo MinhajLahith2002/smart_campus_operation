@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;

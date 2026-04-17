@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Bell,
+  Building2,
   CalendarRange,
   ChevronLeft,
   ChevronRight,
@@ -14,6 +15,7 @@ import {
   Ticket,
   Radar,
   Activity,
+  UserCog,
   Wrench,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -157,7 +159,14 @@ export const AppShell = ({ children }) => {
     { to: '/notifications', icon: Bell, label: 'Signals', hint: 'Alerts and activity' },
   ].filter(Boolean);
 
-  const adminItems = [];
+  const adminItems = user?.role === 'ADMIN'
+    ? [
+        { to: '/admin/resources', icon: Building2, label: 'Resource Desk', hint: 'Facilities and assets' },
+        { to: '/admin/bookings', icon: ShieldCheck, label: 'Booking Desk', hint: 'Operational queue' },
+        { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Assign and triage' },
+        { to: '/admin/users', icon: UserCog, label: 'User Access', hint: 'Roles, status, invites' },
+      ]
+    : [];
 
   const allItems = [...navItems, ...adminItems, { to: '/settings', icon: Settings, label: 'Settings', hint: 'Preferences and theme' }];
 

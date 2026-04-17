@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import { createBooking, getResource, getBooking, updateBooking } from '../lib/operationsApi';
 import { toBackendRole } from '../lib/moduleCApi';
+import { formatAvailabilityWindow } from '../lib/moduleAApi';
 
 export const BookingRequest = () => {
   const [searchParams] = useSearchParams();
@@ -17,6 +18,7 @@ export const BookingRequest = () => {
   const [loading, setLoading] = useState(true);
   const [fetchingBooking, setFetchingBooking] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -42,7 +44,10 @@ export const BookingRequest = () => {
         setResource(data);
         setFormData((current) => ({ ...current, attendees: Math.min(current.attendees, data.capacity || 1) || 1 }));
       } catch (err) {
-        if (active) setError(err.message || 'Unable to load the selected resource.');
+        if (active) {
+          setError(err.message || 'Unable to load the selected resource.');
+          setLoadError(err.message || 'Unable to refresh resource details.');
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -95,7 +100,7 @@ export const BookingRequest = () => {
     return (
       <div className="py-20 text-center">
         <h2 className="text-2xl font-bold">Resource not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">{error || 'The selected resource could not be loaded.'}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{error || loadError || 'The selected resource could not be loaded.'}</p>
         <Button variant="ghost" onClick={() => navigate('/catalogue')} className="mt-4">
           Back to Catalogue
         </Button>
@@ -188,10 +193,11 @@ export const BookingRequest = () => {
           <div className="rounded-[28px] border border-border bg-slate-950 p-5 text-white">
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Resource snapshot</p>
             <h2 className="mt-2 text-2xl font-semibold">{resource.name}</h2>
+            {loadError && <p className="mt-3 text-xs text-slate-300">{loadError}</p>}
             <div className="mt-5 grid gap-3">
               <InlineMetric icon={<MapPin size={14} />} label="Location" value={resource.location} />
               <InlineMetric icon={<Users size={14} />} label="Capacity" value={`${resource.capacity} attendees`} />
-              <InlineMetric icon={<Clock size={14} />} label="Available window" value={`${resource.availableFrom.slice(0, 5)} - ${resource.availableTo.slice(0, 5)}`} />
+              <InlineMetric icon={<Clock size={14} />} label="Available window" value={formatAvailabilityWindow(resource.availabilityWindow)} />
             </div>
           </div>
         </div>
@@ -302,7 +308,7 @@ export const BookingRequest = () => {
                   <Users size={16} /> Max Capacity: {resource.capacity}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock size={16} /> Available: {resource.availableFrom.slice(0, 5)} - {resource.availableTo.slice(0, 5)}
+                  <Clock size={16} /> Available: {formatAvailabilityWindow(resource.availabilityWindow)}
                 </div>
               </div>
             </div>

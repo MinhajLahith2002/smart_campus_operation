@@ -1,6 +1,6 @@
 package com.smartcampus.operationshub.bookings.dto;
 
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import com.smartcampus.operationshub.bookings.domain.BookingStatus;
 import java.time.LocalDate;
 import java.time.LocalTime;

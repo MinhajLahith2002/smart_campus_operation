@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { AlertTriangle, ArrowRight, Clock3, MapPin, Paperclip, ShieldAlert, UserRoundCog, Wrench, X } from 'lucide-react';
-import { Card, Badge, Button } from '../components/ui/Primitives';
+import { Card, Badge, Button, Input } from '../components/ui/Primitives';
 import { assignTechnician, getTicketSummary, getTickets, updateTicketStatus, toBackendRole } from '../lib/moduleCApi';
 import { formatTicketStatusLabel, statusBadgeVariant } from '../lib/moduleCLabels';
 import { getDemoUsers } from '../lib/operationsApi';
@@ -14,11 +14,11 @@ export const AdminTicketsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
-  const [technicians, setTechnicians] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
+  const [technicians, setTechnicians] = useState([]);
   const [assigningTicket, setAssigningTicket] = useState(null);
   const [statusTicket, setStatusTicket] = useState(null);
   const [assignForm, setAssignForm] = useState({ technicianId: '', technicianName: '' });
@@ -115,9 +115,10 @@ export const AdminTicketsPage = () => {
     try {
       setSaving(true);
       setActionError('');
+      const selectedTechnician = technicians.find((item) => item.id === assignForm.technicianId);
       await assignTechnician(assigningTicket.id, {
         technicianId: assignForm.technicianId,
-        technicianName: assignForm.technicianName,
+        technicianName: selectedTechnician?.fullName || '',
         actorId: user.id,
         actorName: user.name,
         actorRole: toBackendRole(user.role),
@@ -252,7 +253,7 @@ export const AdminTicketsPage = () => {
                     <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm dark:bg-white/5">
                       <p className="font-semibold">Current technician</p>
                       <p className="mt-1 text-muted-foreground">
-                        {technicianDirectory[assigningTicket.assignedTechnicianId].name} · {technicianDirectory[assigningTicket.assignedTechnicianId].id} · {technicianDirectory[assigningTicket.assignedTechnicianId].available ? 'Available' : 'Unavailable'}
+                        {technicianDirectory[assigningTicket.assignedTechnicianId].name} Â· {technicianDirectory[assigningTicket.assignedTechnicianId].id} Â· {technicianDirectory[assigningTicket.assignedTechnicianId].available ? 'Available' : 'Unavailable'}
                       </p>
                     </div>
                   )}
@@ -381,7 +382,7 @@ const getAssignmentState = (ticket, technicianDirectory, technicians) => {
       canAssign: false,
       canReassign: false,
       availableAlternatives,
-      assigneeCopy: `${assignedTechnician.name} · Available`,
+      assigneeCopy: `${assignedTechnician.name} Â· Available`,
     };
   }
 
@@ -389,7 +390,7 @@ const getAssignmentState = (ticket, technicianDirectory, technicians) => {
     canAssign: false,
     canReassign: availableAlternatives.length > 0,
     availableAlternatives,
-    assigneeCopy: `${ticket.assignedTechnicianName || ticket.assignedTechnicianId} · Unavailable`,
+    assigneeCopy: `${ticket.assignedTechnicianName || ticket.assignedTechnicianId} Â· Unavailable`,
   };
 };
 

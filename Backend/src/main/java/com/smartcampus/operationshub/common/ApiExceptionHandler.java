@@ -1,4 +1,4 @@
-package com.smartcampus.modulec.controller;
+package com.smartcampus.operationshub.common;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -39,6 +40,24 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(Map.of(
                 "timestamp", OffsetDateTime.now(),
                 "status", HttpStatus.BAD_REQUEST.value(),
+                "message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(ApiValidationException.class)
+    public ResponseEntity<?> handleApiValidation(ApiValidationException exception) {
+        return ResponseEntity.unprocessableEntity().body(Map.of(
+                "timestamp", OffsetDateTime.now(),
+                "status", HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                "message", exception.getMessage(),
+                "details", Map.of("fields", exception.getFields())
+        ));
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<?> handleBadCredentials(BadCredentialsException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                "timestamp", OffsetDateTime.now(),
+                "status", HttpStatus.UNAUTHORIZED.value(),
                 "message", exception.getMessage()));
     }
 

@@ -262,7 +262,6 @@ export const ReportIssuePage = () => {
   };
 
   const applySuggestedPriority = () => handleChange('priority', suggestedPriority);
-
   const handleSubmit = async (event) => {
     event.preventDefault();
 

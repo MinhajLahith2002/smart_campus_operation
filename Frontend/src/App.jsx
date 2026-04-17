@@ -1,31 +1,47 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { AppShell } from './components/AppShell';
-import { LandingPage } from './pages/LandingPage';
-import { Dashboard } from './pages/Dashboard';
-import { Catalogue } from './pages/Catalogue';
-import { BookingRequest } from './pages/BookingRequest';
-import { MyBookings } from './pages/MyBookings';
-import { MyTickets } from './pages/MyTickets';
-import { AuthPage } from './pages/AuthPage';
-import { NotificationsPage } from './pages/NotificationsPage';
-import { AdminBookingsPage } from './pages/AdminBookingsPage';
-import { AdminTicketsPage } from './pages/AdminTicketsPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { ReportIssuePage } from './pages/ReportIssuePage';
-import { TicketDetailPage } from './pages/TicketDetailPage';
-import { TechnicianTicketsPage } from './pages/TechnicianTicketsPage';
+
+const AppShell = lazy(() => import('./components/AppShell').then((module) => ({ default: module.AppShell })));
+const LandingPage = lazy(() => import('./pages/LandingPage').then((module) => ({ default: module.LandingPage })));
+const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const Catalogue = lazy(() => import('./pages/Catalogue').then((module) => ({ default: module.Catalogue })));
+const BookingRequest = lazy(() => import('./pages/BookingRequest').then((module) => ({ default: module.BookingRequest })));
+const MyBookings = lazy(() => import('./pages/MyBookings').then((module) => ({ default: module.MyBookings })));
+const MyTickets = lazy(() => import('./pages/MyTickets').then((module) => ({ default: module.MyTickets })));
+const AuthPage = lazy(() => import('./pages/auth/AuthPage').then((module) => ({ default: module.AuthPage })));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })));
+const AdminBookingsPage = lazy(() => import('./pages/AdminBookingsPage').then((module) => ({ default: module.AdminBookingsPage })));
+const AdminTicketsPage = lazy(() => import('./pages/AdminTicketsPage').then((module) => ({ default: module.AdminTicketsPage })));
+const AdminResourcesPage = lazy(() => import('./pages/AdminResourcesPage').then((module) => ({ default: module.AdminResourcesPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
+const ReportIssuePage = lazy(() => import('./pages/ReportIssuePage').then((module) => ({ default: module.ReportIssuePage })));
+const ResourceDetailPage = lazy(() => import('./pages/ResourceDetailPage').then((module) => ({ default: module.ResourceDetailPage })));
+const TicketDetailPage = lazy(() => import('./pages/TicketDetailPage').then((module) => ({ default: module.TicketDetailPage })));
+const TechnicianTicketsPage = lazy(() => import('./pages/TechnicianTicketsPage').then((module) => ({ default: module.TechnicianTicketsPage })));
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage').then((module) => ({ default: module.RegisterPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
+const InviteSetupPage = lazy(() => import('./pages/auth/InviteSetupPage').then((module) => ({ default: module.InviteSetupPage })));
+const VerifyEmailPage = lazy(() => import('./pages/auth/VerifyEmailPage').then((module) => ({ default: module.VerifyEmailPage })));
+const OAuthSuccessPage = lazy(() => import('./pages/auth/OAuthSuccessPage').then((module) => ({ default: module.OAuthSuccessPage })));
+const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage').then((module) => ({ default: module.AdminUsersPage })));
+
+const RouteLoadingScreen = ({ message = 'Loading workspace...' }) => (
+  <div className="px-4 py-16 text-center text-sm text-muted-foreground">{message}</div>
+);
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <RouteLoadingScreen message="Loading secure workspace..." />;
   if (!isAuthenticated) return <Navigate to="/auth" replace />;
   return <AppShell>{children}</AppShell>;
 };
 
 const PublicOnlyRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <RouteLoadingScreen message="Loading session..." />;
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
   return children;
 };
@@ -58,30 +74,41 @@ export default function App() {
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/auth" element={<PublicOnlyRoute><AuthPage /></PublicOnlyRoute>} />
+          <Suspense fallback={<RouteLoadingScreen />}>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/auth" element={<PublicOnlyRoute><AuthPage /></PublicOnlyRoute>} />
+              <Route path="/auth/oauth-success" element={<OAuthSuccessPage />} />
+              <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
+              <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPasswordPage /></PublicOnlyRoute>} />
+              <Route path="/reset-password" element={<PublicOnlyRoute><ResetPasswordPage /></PublicOnlyRoute>} />
+              <Route path="/verify-email" element={<PublicOnlyRoute><VerifyEmailPage /></PublicOnlyRoute>} />
+              <Route path="/invite/setup" element={<PublicOnlyRoute><InviteSetupPage /></PublicOnlyRoute>} />
 
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/catalogue" element={<ProtectedRoute><Catalogue /></ProtectedRoute>} />
-            <Route path="/bookings" element={<ProtectedRoute><BookingsEntryRedirect /></ProtectedRoute>} />
-            <Route path="/bookings/my" element={<ProtectedRoute><RoleRoute roles={['USER']}><MyBookings /></RoleRoute></ProtectedRoute>} />
-            <Route path="/bookings/new" element={<ProtectedRoute><RoleRoute roles={['USER']}><BookingRequest /></RoleRoute></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/catalogue" element={<ProtectedRoute><Catalogue /></ProtectedRoute>} />
+              <Route path="/catalogue/:resourceId" element={<ProtectedRoute><ResourceDetailPage /></ProtectedRoute>} />
+              <Route path="/bookings" element={<ProtectedRoute><BookingsEntryRedirect /></ProtectedRoute>} />
+              <Route path="/bookings/my" element={<ProtectedRoute><RoleRoute roles={['USER']}><MyBookings /></RoleRoute></ProtectedRoute>} />
+              <Route path="/bookings/new" element={<ProtectedRoute><RoleRoute roles={['USER']}><BookingRequest /></RoleRoute></ProtectedRoute>} />
 
-            <Route path="/tickets" element={<ProtectedRoute><TicketsEntryRedirect /></ProtectedRoute>} />
-            <Route path="/tickets/my" element={<ProtectedRoute><RoleRoute roles={['USER']}><MyTickets /></RoleRoute></ProtectedRoute>} />
-            <Route path="/tickets/new" element={<ProtectedRoute><RoleRoute roles={['USER', 'ADMIN', 'TECHNICIAN']}><ReportIssuePage /></RoleRoute></ProtectedRoute>} />
-            <Route path="/tickets/:ticketId/edit" element={<ProtectedRoute><RoleRoute roles={['USER']}><ReportIssuePage /></RoleRoute></ProtectedRoute>} />
-            <Route path="/tickets/assigned" element={<ProtectedRoute><RoleRoute roles={['TECHNICIAN']}><TechnicianTicketsPage /></RoleRoute></ProtectedRoute>} />
-            <Route path="/tickets/:ticketId" element={<ProtectedRoute><TicketDetailPage /></ProtectedRoute>} />
+              <Route path="/tickets" element={<ProtectedRoute><TicketsEntryRedirect /></ProtectedRoute>} />
+              <Route path="/tickets/my" element={<ProtectedRoute><RoleRoute roles={['USER']}><MyTickets /></RoleRoute></ProtectedRoute>} />
+              <Route path="/tickets/new" element={<ProtectedRoute><RoleRoute roles={['USER', 'ADMIN', 'TECHNICIAN']}><ReportIssuePage /></RoleRoute></ProtectedRoute>} />
+              <Route path="/tickets/:ticketId/edit" element={<ProtectedRoute><RoleRoute roles={['USER']}><ReportIssuePage /></RoleRoute></ProtectedRoute>} />
+              <Route path="/tickets/assigned" element={<ProtectedRoute><RoleRoute roles={['TECHNICIAN']}><TechnicianTicketsPage /></RoleRoute></ProtectedRoute>} />
+              <Route path="/tickets/:ticketId" element={<ProtectedRoute><TicketDetailPage /></ProtectedRoute>} />
 
-            <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
-            <Route path="/admin/bookings" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminBookingsPage /></RoleRoute></ProtectedRoute>} />
-            <Route path="/admin/tickets" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminTicketsPage /></RoleRoute></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+              <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+              <Route path="/admin/bookings" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminBookingsPage /></RoleRoute></ProtectedRoute>} />
+              <Route path="/admin/resources" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminResourcesPage /></RoleRoute></ProtectedRoute>} />
+              <Route path="/admin/tickets" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminTicketsPage /></RoleRoute></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute><RoleRoute roles={['ADMIN']}><AdminUsersPage /></RoleRoute></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

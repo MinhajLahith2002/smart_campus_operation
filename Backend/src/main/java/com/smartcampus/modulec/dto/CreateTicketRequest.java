@@ -2,7 +2,7 @@ package com.smartcampus.modulec.dto;
 
 import com.smartcampus.modulec.domain.TicketCategory;
 import com.smartcampus.modulec.domain.TicketPriority;
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

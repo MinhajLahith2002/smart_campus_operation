@@ -1,6 +1,6 @@
 package com.smartcampus.operationshub.bookings.dto;
 
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import java.time.OffsetDateTime;
 
 public record BookingActivityResponse(

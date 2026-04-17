@@ -1,4 +1,4 @@
-package com.smartcampus.modulec.domain;
+package com.smartcampus.operationshub.auth.domain;
 
 public enum UserRole {
     STUDENT,

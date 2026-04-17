@@ -1,6 +1,6 @@
 package com.smartcampus.modulec.dto;
 
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 

@@ -1,6 +1,6 @@
 package com.smartcampus.operationshub.config;
 
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import com.smartcampus.operationshub.bookings.domain.BookingRecord;
 import com.smartcampus.operationshub.bookings.domain.BookingStatus;
 import com.smartcampus.operationshub.bookings.repository.BookingRecordRepository;

@@ -1,4 +1,5 @@
-export const MODULE_C_API_BASE = import.meta.env.VITE_MODULE_C_API_URL || 'http://127.0.0.1:8081/api/module-c/tickets';
+const API_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://127.0.0.1:8081';
+export const MODULE_C_API_BASE = import.meta.env.VITE_MODULE_C_API_URL || `${API_BASE}/api/module-c/tickets`;
 
 const roleMap = {
   USER: 'STUDENT',
@@ -13,17 +14,23 @@ const ensureOk = async (response) => {
   if (response.ok) return response;
 
   let message = 'Request failed.';
+  let details = null;
   try {
     const data = await response.json();
     message = data.message || data.error || message;
+    details = data.details || null;
   } catch (_) {
     // ignore
   }
-  throw new Error(message);
+  const error = new Error(message);
+  error.status = response.status;
+  error.details = details;
+  throw error;
 };
 
 const jsonRequest = async (url, options = {}) => {
   const response = await ensureOk(await fetch(url, {
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers || {}),

@@ -12,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 
 @Entity
 @Table(name = "ticket_comments")
