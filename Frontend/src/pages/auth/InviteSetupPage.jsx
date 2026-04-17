@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Wrench } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../../components/ui/Primitives';
+import { Badge, Button, Card, Input, NoticeBanner, PasswordInput } from '../../components/ui/Primitives';
 import { acceptInvite, getInviteDetails } from '../../lib/authApi';
 import { getPasswordChecklist, validatePasswordReset } from '../../lib/authValidation';
 
@@ -80,6 +80,12 @@ export const InviteSetupPage = () => {
           </div>
         </div>
 
+        {loadingError && (
+          <NoticeBanner className="mb-6" variant="error" onDismiss={() => setLoadingError('')}>
+            {loadingError}
+          </NoticeBanner>
+        )}
+
         <div className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -93,13 +99,13 @@ export const InviteSetupPage = () => {
         <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
           <label className="space-y-2 text-sm font-semibold">
             <span>Password</span>
-            <Input type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
+            <PasswordInput value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
             {errors.password && <p className="text-sm text-danger">{errors.password}</p>}
           </label>
 
           <label className="space-y-2 text-sm font-semibold">
             <span>Confirm Password</span>
-            <Input type="password" value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} />
+            <PasswordInput value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} />
             {errors.confirmPassword && <p className="text-sm text-danger">{errors.confirmPassword}</p>}
           </label>
 
@@ -113,9 +119,6 @@ export const InviteSetupPage = () => {
               ))}
             </div>
           </div>
-
-          {loadingError && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{loadingError}</div>}
-
           <Button type="submit" isLoading={submitting} disabled={submitting}>Activate Technician Account</Button>
 
           <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-4 text-sm leading-7 text-muted-foreground">

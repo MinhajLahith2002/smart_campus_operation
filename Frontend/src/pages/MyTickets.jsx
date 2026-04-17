@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { AlertCircle, ChevronRight, Clock, MapPin, MessageSquareMore, Paperclip, Ticket as TicketIcon, Wrench } from 'lucide-react';
-import { Card, Badge, Button } from '../components/ui/Primitives';
+import { Card, Badge, Button, NoticeBanner } from '../components/ui/Primitives';
 import { cn } from '../lib/utils';
 import { getTickets } from '../lib/moduleCApi';
 import { useAuth } from '../context/AuthContext';
@@ -92,7 +92,11 @@ export const MyTickets = () => {
         </Button>
       </div>
 
-      {error && <Card className="border-danger/30 bg-danger/5 p-5 text-sm text-danger">{error}</Card>}
+      {error && (
+        <NoticeBanner variant="error" onDismiss={() => setError('')}>
+          {error}
+        </NoticeBanner>
+      )}
 
       {loading ? (
         <Card className="p-8 text-sm text-muted-foreground">Loading ticket history...</Card>

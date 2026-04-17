@@ -1,12 +1,14 @@
 const API_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://127.0.0.1:8081';
 const AUTH_BASE = `${API_BASE}/api/auth`;
+const REQUEST_TIMEOUT_MS = 12000;
 
 export const GOOGLE_LOGIN_URL = `${API_BASE}/oauth2/authorization/google`;
 
 const withJson = async (response) => {
   let data = null;
   try {
-    data = await response.json();
+    const raw = await response.text();
+    data = raw ? JSON.parse(raw) : null;
   } catch (_) {
     data = null;
   }
@@ -22,14 +24,40 @@ const withJson = async (response) => {
   throw error;
 };
 
-const request = async (path, options = {}) => withJson(await fetch(`${AUTH_BASE}${path}`, {
-  credentials: 'include',
-  headers: {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  },
-  ...options,
-}));
+const request = async (path, options = {}) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${AUTH_BASE}${path}`, {
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+      ...options,
+      signal: options.signal || controller.signal,
+    });
+
+    return await withJson(response);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error('The server took too long to respond. Please try again.');
+      timeoutError.code = 'REQUEST_TIMEOUT';
+      throw timeoutError;
+    }
+
+    if (error instanceof TypeError) {
+      const networkError = new Error('Unable to reach the server. Check that the backend is running and try again.');
+      networkError.code = 'NETWORK_ERROR';
+      throw networkError;
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
 
 export const getAuthConfig = async () => request('/config');
 export const getCurrentUser = async () => request('/me');

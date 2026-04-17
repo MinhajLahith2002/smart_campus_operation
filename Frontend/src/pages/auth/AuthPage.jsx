@@ -1,49 +1,36 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
+  AlertCircle,
   ArrowRight,
-  Building2,
-  Chrome,
-  ShieldCheck,
-  UserCog,
-  Wrench,
+  CheckCircle2,
+  Radar,
 } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../../components/ui/Primitives';
+import { Button, Input, NoticeBanner, PasswordInput } from '../../components/ui/Primitives';
+import authCampusOperationsIllustration from '../../assets/auth-campus-operations-illustration.png';
 import { Navbar } from '../../components/Navbar';
 import { useAuth } from '../../context/AuthContext';
 import { getAuthConfig, GOOGLE_LOGIN_URL } from '../../lib/authApi';
-import { validateLogin } from '../../lib/authValidation';
-
-const accessModes = [
-  {
-    title: 'Student / Staff',
-    icon: Building2,
-    badge: 'Student onboarding',
-    copy: 'Students can create one account through local registration or Google onboarding. Each student account keeps a single sign-in method instead of linking both.',
-  },
-  {
-    title: 'Operations Admin',
-    icon: UserCog,
-    badge: 'Local only',
-    copy: 'Admin access comes from backend bootstrap configuration and uses controlled local sign-in only.',
-  },
-  {
-    title: 'Technician',
-    icon: Wrench,
-    badge: 'Invite only',
-    copy: 'Technicians do not self-register. An admin invite creates the account, setup completes through the invite flow, and sign-in stays local after activation.',
-  },
-];
+import { getPasswordChecklist, validateLogin } from '../../lib/authValidation';
 
 export const AuthPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticating } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
+  const [dirty, setDirty] = useState({});
   const [touched, setTouched] = useState({});
   const [errors, setErrors] = useState({});
   const [authError, setAuthError] = useState('');
   const [googleEnabled, setGoogleEnabled] = useState(true);
+  const passwordChecklist = useMemo(() => getPasswordChecklist(form.password), [form.password]);
+  const liveValidation = useMemo(() => validateLogin(form), [form]);
+  const passwordScore = passwordChecklist.filter((item) => item.valid).length;
+  const passwordIsStrong = passwordScore === passwordChecklist.length;
+  const passwordStrengthLabel = passwordIsStrong ? 'Strong' : passwordScore >= 3 ? 'Medium' : 'Weak';
+  const passwordStrengthClass = passwordIsStrong ? 'text-success' : passwordScore >= 3 ? 'text-warning' : 'text-danger';
+  const passwordBarClass = passwordIsStrong ? 'bg-success' : passwordScore >= 3 ? 'bg-warning' : 'bg-danger';
+  const shouldShowValidation = (field) => Boolean(dirty[field] || touched[field]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -70,7 +57,8 @@ export const AuthPage = () => {
   const handleChange = (field, value) => {
     const nextForm = { ...form, [field]: value };
     setForm(nextForm);
-    if (touched[field]) {
+    setDirty((current) => ({ ...current, [field]: true }));
+    if (dirty[field] || touched[field]) {
       setErrors(validateLogin(nextForm));
     }
   };
@@ -97,152 +85,189 @@ export const AuthPage = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+    <div className="auth-page min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <Navbar fixed />
 
-        <div className="glass-panel mb-8 flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">Authentication Hub</p>
-            <h1 className="mt-2 text-2xl font-semibold">Secure campus access with backend-owned roles</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Local sign-in uses email and password, Google onboarding is student-only, and the backend decides the account role and status for every session.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <section className="space-y-6">
-            <div>
-              <div className="eyebrow mb-4">Access policy</div>
-              <h2 className="section-title">Roles are visible, but no longer chosen during sign-in.</h2>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-                This keeps role assignment database-driven, avoids unsafe client-side role switching, and enforces one sign-in method per student account instead of same-email auto-linking.
-              </p>
-            </div>
-
-            <div className="grid gap-4">
-              {accessModes.map((mode) => {
-                const Icon = mode.icon;
-                return (
-                  <div key={mode.title} className="premium-card bg-white/65 p-6 dark:bg-white/5">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <Icon size={22} />
-                      </div>
-                      <div>
-                        <Badge variant="info">{mode.badge}</Badge>
-                        <h3 className="mt-4 text-xl font-semibold">{mode.title}</h3>
-                        <p className="mt-2 text-sm leading-7 text-muted-foreground">{mode.copy}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="space-y-6">
-            <Card className="bg-white/70 p-7 dark:bg-white/5">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <div className="eyebrow mb-4">Sign in</div>
-                  <h2 className="text-2xl font-semibold">Email and password for local access</h2>
-                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                    Local sign-in is for local student accounts, invited technicians, and seeded admins. Google is reserved for student Google accounts and onboarding only.
+        <section className="surface-strong auth-shell overflow-hidden">
+          <div className="grid min-h-[calc(100svh-12rem)] lg:min-h-[640px] lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
+            <div className="auth-divider order-2 flex items-center px-6 py-8 sm:px-10 lg:order-1 lg:items-start lg:border-r lg:px-14 lg:py-14">
+              <div className="mx-auto w-full max-w-md">
+                <p className="auth-kicker text-center text-xs font-bold uppercase tracking-[0.36em]">Shared login</p>
+                <div className="mt-5 text-center">
+                  <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Login</h1>
+                  <p className="auth-copy mx-auto mt-4 max-w-sm text-sm leading-7">
+                    Sign in with your verified email and password.
                   </p>
                 </div>
-                <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                  <ShieldCheck size={20} />
-                </div>
-              </div>
 
-              <form className="space-y-5" onSubmit={handleSubmit}>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold">Email</label>
-                  <Input
-                    type="email"
-                    placeholder="name@campus.edu"
-                    value={form.email}
-                    onChange={(event) => handleChange('email', event.target.value)}
-                    onBlur={() => handleBlur('email')}
-                  />
-                  {touched.email && errors.email && <p className="text-sm text-danger">{errors.email}</p>}
-                </div>
+                <form className="mt-7 space-y-4" onSubmit={handleSubmit}>
+                  {authError && (
+                    <NoticeBanner variant="error" onDismiss={() => setAuthError('')}>
+                      {authError}
+                    </NoticeBanner>
+                  )}
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <label className="text-sm font-semibold">Password</label>
-                    <Link to="/forgot-password" className="text-sm font-semibold text-primary">
-                      Forgot Password?
-                    </Link>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold">Email</label>
+                    <Input
+                      type="email"
+                      placeholder="Email address"
+                      value={form.email}
+                      onChange={(event) => handleChange('email', event.target.value)}
+                      onBlur={() => handleBlur('email')}
+                      className="auth-input h-12 rounded-2xl px-4 focus-visible:ring-[color:var(--auth-accent)] focus-visible:ring-offset-0"
+                    />
+                    {shouldShowValidation('email') && errors.email && <p className="text-sm text-danger">{errors.email}</p>}
                   </div>
-                  <Input
-                    type="password"
-                    placeholder="Enter your password"
-                    value={form.password}
-                    onChange={(event) => handleChange('password', event.target.value)}
-                    onBlur={() => handleBlur('password')}
-                  />
-                  {touched.password && errors.password && <p className="text-sm text-danger">{errors.password}</p>}
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-sm font-semibold">Password</label>
+                      <Link to="/forgot-password" className="auth-link text-sm font-semibold">
+                        Forgot Password?
+                      </Link>
+                    </div>
+                    <PasswordInput
+                      placeholder="Password"
+                      value={form.password}
+                      onChange={(event) => handleChange('password', event.target.value)}
+                      onBlur={() => handleBlur('password')}
+                      className="auth-input h-12 rounded-2xl px-4 focus-visible:ring-[color:var(--auth-accent)] focus-visible:ring-offset-0"
+                    />
+
+                    {form.password && (
+                      <div className="rounded-[22px] border border-border/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(245,247,251,0.96))] px-4 py-3 shadow-[0_12px_28px_rgba(15,23,42,0.05)] dark:border-white/8 dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))]">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                            Password strength
+                          </p>
+                          <span className={`text-sm font-semibold ${passwordStrengthClass}`}>
+                            {passwordStrengthLabel}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-5 gap-2">
+                          {passwordChecklist.map((item, index) => (
+                            <div
+                              key={item.label}
+                              className={`h-2.5 rounded-full transition-colors ${
+                                index < passwordScore
+                                  ? passwordBarClass
+                                  : 'bg-slate-200 dark:bg-white/10'
+                              }`}
+                            />
+                          ))}
+                        </div>
+
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {passwordChecklist.map((item) => (
+                            <div key={item.label} className={`flex items-start gap-2 text-sm leading-5 ${item.valid ? 'text-success' : 'text-danger'}`}>
+                              <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                                item.valid
+                                  ? 'bg-success/12 text-success'
+                                  : 'bg-danger/10 text-danger'
+                              }`}>
+                                {item.valid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                              </span>
+                              <span>{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {shouldShowValidation('password') && errors.password && <p className="text-sm text-danger">{errors.password}</p>}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="auth-primary-button mt-1 w-full rounded-full text-white"
+                    size="lg"
+                    isLoading={isAuthenticating}
+                    disabled={isAuthenticating || Object.keys(liveValidation).length > 0}
+                  >
+                    Sign In
+                    {!isAuthenticating && <ArrowRight size={18} />}
+                  </Button>
+                </form>
+
+                <div className="auth-option-divider auth-copy my-4 flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.28em]">
+                  <div className="auth-option-divider-line h-px flex-1" />
+                  Or
+                  <div className="auth-option-divider-line h-px flex-1" />
                 </div>
 
-                {authError && (
-                  <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">
-                    {authError}
-                  </div>
+                <p className="auth-copy -mt-1 mb-5 text-center text-sm">
+                  Students can sign in above or use Google login below.
+                </p>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="auth-google-button w-full gap-2 rounded-full disabled:opacity-80 disabled:text-muted-foreground"
+                  onClick={() => window.location.assign(GOOGLE_LOGIN_URL)}
+                  disabled={!googleEnabled}
+                >
+                  <GoogleMark />
+                  Continue with Google
+                </Button>
+
+                {googleEnabled ? (
+                  <p className="auth-copy mt-3 text-center text-sm">
+                    Google sign-in is available for student accounts. Admin and technician access remains local only.
+                  </p>
+                ) : (
+                  <p className="auth-copy mt-3 text-center text-sm text-warning">
+                    Google sign-in is currently unavailable because backend Google OAuth credentials are not configured yet.
+                  </p>
                 )}
 
-                <Button type="submit" className="w-full gap-2" size="lg" isLoading={isAuthenticating}>
-                  Sign In
-                  {!isAuthenticating && <ArrowRight size={18} />}
-                </Button>
-              </form>
-
-              <div className="my-6 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">
-                <div className="h-px flex-1 bg-border" />
-                Student Google onboarding
-                <div className="h-px flex-1 bg-border" />
+                <p className="auth-copy mt-5 text-center text-sm">
+                  Don&apos;t have a student account?{' '}
+                  <Link to="/register" className="auth-link font-semibold">
+                    Create your account
+                  </Link>
+                </p>
               </div>
+            </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                className="w-full gap-2"
-                onClick={() => window.location.assign(GOOGLE_LOGIN_URL)}
-                disabled={!googleEnabled}
-              >
-                <GoogleMark />
-                Continue with Google
-                <Chrome size={16} />
-              </Button>
+            <div className="auth-aside auth-divider relative order-1 flex items-center border-b px-6 py-8 sm:px-10 lg:order-2 lg:items-start lg:border-b-0 lg:px-12 lg:py-14">
+              <div className="relative mx-auto flex w-full max-w-none flex-col">
+                <div className="inline-flex w-fit items-center gap-3">
+                  <div className="auth-brand-icon flex h-12 w-12 items-center justify-center rounded-2xl text-white">
+                    <Radar size={20} />
+                  </div>
+                  <div className="min-w-0 sm:min-w-max">
+                    <p className="auth-brand-title text-xs font-bold uppercase tracking-[0.24em]">CampusHub</p>
+                    <p className="auth-brand-copy text-sm font-semibold sm:whitespace-nowrap">Bookings, assets, and maintenance</p>
+                  </div>
+                </div>
 
-              {!googleEnabled && (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Google OAuth is hidden until backend client credentials are configured.
-                </p>
-              )}
+                <div className="mt-2 max-w-[44rem]">
+                  <h2 className="text-[clamp(2rem,2.5vw,3.1rem)] font-semibold tracking-tight leading-[1.04] text-balance">
+                    Manage campus operations
+                  </h2>
+                  <p className="auth-copy mt-2 max-w-2xl text-base leading-7">
+                    Review bookings, issue queues, and secure access in one place.
+                  </p>
+                </div>
 
-              {googleEnabled && (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Use Google only for student accounts created through Google onboarding. Admin and technician access stays local-only.
-                </p>
-              )}
-
-              <div className="mt-6 rounded-2xl border border-border bg-muted/60 px-4 py-4 dark:bg-white/5">
-                <p className="text-sm font-semibold">Need a local student account?</p>
-                <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                  Student self-registration is available with validation for email, student ID, faculty, batch, campus, phone, and password strength. Local and Google accounts stay separate by design.
-                </p>
-                <Link to="/register" className="mt-3 inline-flex text-sm font-semibold text-primary">
-                  Create a student account
-                </Link>
+                <div className="relative mt-4 flex-1">
+                  <div className="auth-illustration-halo absolute inset-x-6 bottom-4 top-6 rounded-[40px] blur-3xl" />
+                  <div className="relative overflow-hidden rounded-[38px] border border-transparent bg-transparent p-0 shadow-none">
+                    <img
+                      src={authCampusOperationsIllustration}
+                      alt="Illustration of campus operations dashboards, support checklists, and live activity monitoring"
+                      className="relative mx-auto w-full max-w-[620px] object-contain"
+                    />
+                  </div>
+                </div>
               </div>
-            </Card>
-
-          </section>
-        </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

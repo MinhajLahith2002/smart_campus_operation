@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Image as ImageIcon, MapPin, MessageSquare, Paperclip, Pencil, PhoneCall, ShieldAlert, Trash2, UserRoundCog, Wrench, X } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../components/ui/Primitives';
+import { Badge, Button, Card, Input, NoticeBanner } from '../components/ui/Primitives';
 import { addComment, assignTechnician, closeTicket, deleteComment, getTicket, reopenTicket, toBackendRole, updateComment, updateTicketStatus } from '../lib/moduleCApi';
 import { useAuth } from '../context/AuthContext';
 
@@ -183,7 +183,11 @@ export const TicketDetailPage = () => {
         </div>
       </section>
 
-      {actionError && <Card className="border-warning/30 bg-warning/5 p-5 text-sm text-warning">{actionError}</Card>}
+      {actionError && (
+        <NoticeBanner variant="warning" onDismiss={() => setActionError('')}>
+          {actionError}
+        </NoticeBanner>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-6">
@@ -280,7 +284,7 @@ export const TicketDetailPage = () => {
                 <div key={activity.id} className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
                   <p className="font-semibold text-foreground">{activity.action.replace('_', ' ')}</p>
                   <p className="mt-1">{activity.detail}</p>
-                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} · {activity.actorRole}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} - {activity.actorRole}</p>
                 </div>
               ))}
             </div>

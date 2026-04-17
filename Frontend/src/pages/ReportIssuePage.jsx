@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MOCK_RESOURCES } from '../mockData';
-import { Button, Card, Input, Badge } from '../components/ui/Primitives';
+import { Button, Card, Input, Badge, NoticeBanner } from '../components/ui/Primitives';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -159,6 +159,12 @@ export const ReportIssuePage = () => {
       <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
         <Card className="bg-white/70 p-8 dark:bg-white/5">
           <form onSubmit={handleSubmit} className="space-y-8">
+            {error && (
+              <NoticeBanner variant="error" onDismiss={() => setError('')}>
+                {error}
+              </NoticeBanner>
+            )}
+
             <section className="space-y-4">
               <div className="flex items-center gap-2 text-lg font-semibold"><ClipboardList size={18} className="text-primary" /> Incident context</div>
               <div className="grid gap-4 md:grid-cols-2">
@@ -228,8 +234,6 @@ export const ReportIssuePage = () => {
                 <Input type="email" value={formData.preferredContact} onChange={(event) => handleChange('preferredContact', event.target.value)} placeholder="name@campus.edu" required />
               </label>
             </section>
-
-            {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
 
             <div className="sticky bottom-4 flex flex-col gap-3 rounded-2xl border border-border bg-[var(--panel)]/95 px-4 py-4 backdrop-blur md:flex-row md:items-center md:justify-between">
               <p className="text-sm text-muted-foreground">Submission creates an `OPEN` ticket and sends it into the admin triage queue.</p>

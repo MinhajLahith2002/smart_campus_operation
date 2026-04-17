@@ -14,15 +14,18 @@ public class LoggingAuthMailService implements AuthMailService {
     @Override
     public void sendVerificationEmail(AuthUser user, String verificationLink) {
         logger.info("Verification email prepared for {}. Configure SMTP to deliver auth emails.", user.getEmail());
+        logger.info("Development verification link for {} -> {}", user.getEmail(), verificationLink);
     }
 
     @Override
     public void sendPasswordResetEmail(AuthUser user, String resetLink) {
         logger.info("Password reset email prepared for {}. Configure SMTP to deliver auth emails.", user.getEmail());
+        logger.info("Development password reset link for {} -> {}", user.getEmail(), resetLink);
     }
 
     @Override
     public void sendTechnicianInviteEmail(TechnicianInvite invite, String inviteLink) {
         logger.info("Technician invite email prepared for {}. Configure SMTP to deliver auth emails.", invite.getEmail());
+        logger.info("Development technician invite link for {} -> {}", invite.getEmail(), inviteLink);
     }
 }

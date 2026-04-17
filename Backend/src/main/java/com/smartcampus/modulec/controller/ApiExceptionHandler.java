@@ -53,6 +53,18 @@ public class ApiExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(ApiRateLimitException.class)
+    public ResponseEntity<?> handleRateLimit(ApiRateLimitException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(exception.getRetryAfterSeconds()))
+                .body(Map.of(
+                        "timestamp", OffsetDateTime.now(),
+                        "status", HttpStatus.TOO_MANY_REQUESTS.value(),
+                        "message", exception.getMessage(),
+                        "details", Map.of("retryAfterSeconds", exception.getRetryAfterSeconds())
+                ));
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<?> handleBadCredentials(BadCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(

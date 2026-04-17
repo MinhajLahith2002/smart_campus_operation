@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../../components/ui/Primitives';
+import { Badge, Button, Card, Input, NoticeBanner, PasswordInput } from '../../components/ui/Primitives';
 import { Navbar } from '../../components/Navbar';
 import { resetPassword } from '../../lib/authApi';
 import { getPasswordChecklist, validatePasswordReset } from '../../lib/authValidation';
@@ -70,16 +70,29 @@ export const ResetPasswordPage = () => {
               </div>
             </div>
 
+            <div className="mb-6 space-y-3">
+              {message && (
+                <NoticeBanner variant="success" onDismiss={() => setMessage('')}>
+                  {message}
+                </NoticeBanner>
+              )}
+              {serverError && (
+                <NoticeBanner variant="error" onDismiss={() => setServerError('')}>
+                  {serverError}
+                </NoticeBanner>
+              )}
+            </div>
+
             <form className="space-y-5" onSubmit={handleSubmit}>
               <label className="space-y-2 text-sm font-semibold">
                 <span>New Password</span>
-                <Input type="password" value={form.password} onChange={(event) => applyFieldUpdate('password', event.target.value)} onBlur={() => setTouched((current) => ({ ...current, password: true }))} />
+                <PasswordInput value={form.password} onChange={(event) => applyFieldUpdate('password', event.target.value)} onBlur={() => setTouched((current) => ({ ...current, password: true }))} />
                 {touched.password && errors.password && <p className="text-sm text-danger">{errors.password}</p>}
               </label>
 
               <label className="space-y-2 text-sm font-semibold">
                 <span>Confirm Password</span>
-                <Input type="password" value={form.confirmPassword} onChange={(event) => applyFieldUpdate('confirmPassword', event.target.value)} onBlur={() => setTouched((current) => ({ ...current, confirmPassword: true }))} />
+                <PasswordInput value={form.confirmPassword} onChange={(event) => applyFieldUpdate('confirmPassword', event.target.value)} onBlur={() => setTouched((current) => ({ ...current, confirmPassword: true }))} />
                 {touched.confirmPassword && errors.confirmPassword && <p className="text-sm text-danger">{errors.confirmPassword}</p>}
               </label>
 
@@ -93,10 +106,6 @@ export const ResetPasswordPage = () => {
                   ))}
                 </div>
               </div>
-
-              {message && <div className="rounded-2xl border border-success/30 bg-success/5 px-4 py-4 text-sm text-success">{message}</div>}
-              {serverError && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{serverError}</div>}
-
               <Button type="submit" isLoading={submitting} disabled={submitting}>Update Password</Button>
             </form>
           </Card>

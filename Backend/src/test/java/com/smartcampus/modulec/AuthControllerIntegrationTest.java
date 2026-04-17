@@ -24,6 +24,7 @@ import com.smartcampus.modulec.repository.TechnicianInviteRepository;
 import com.smartcampus.modulec.security.AuthUserPrincipal;
 import com.smartcampus.modulec.service.AuthMailService;
 import com.smartcampus.modulec.service.AuthService;
+import com.smartcampus.modulec.service.AuthThrottleService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.OffsetDateTime;
@@ -67,11 +68,15 @@ class AuthControllerIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private AuthThrottleService authThrottleService;
+
     @MockBean
     private AuthMailService authMailService;
 
     @BeforeEach
     void setUp() {
+        authThrottleService.clearAll();
         technicianInviteRepository.deleteAll();
         passwordResetTokenRepository.deleteAll();
         emailVerificationTokenRepository.deleteAll();
@@ -319,6 +324,26 @@ class AuthControllerIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message", is("If an account exists for that email, a password reset link has been sent.")));
+    }
+
+    @Test
+    void forgotPasswordIsRateLimitedForRepeatedRequests() throws Exception {
+        saveUser("student-rate", "ratelimit@campus.edu", UserRole.STUDENT, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"ratelimit@campus.edu"}
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"ratelimit@campus.edu"}
+                                """))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.details.retryAfterSeconds").exists());
     }
 
     @Test

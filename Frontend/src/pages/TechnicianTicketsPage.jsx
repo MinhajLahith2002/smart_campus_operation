@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { ArrowRight, Clock3, MapPin, ShieldCheck, Wrench } from 'lucide-react';
-import { Badge, Button, Card } from '../components/ui/Primitives';
+import { Badge, Button, Card, NoticeBanner } from '../components/ui/Primitives';
 import { getTickets, toBackendRole, updateTicketStatus } from '../lib/moduleCApi';
 import { useAuth } from '../context/AuthContext';
 
@@ -72,8 +72,18 @@ export const TechnicianTicketsPage = () => {
         </div>
       </section>
 
-      {error && <Card className="border-danger/30 bg-danger/5 p-5 text-sm text-danger">{error}</Card>}
-      {actionError && <Card className="border-warning/30 bg-warning/5 p-5 text-sm text-warning">{actionError}</Card>}
+      <div className="space-y-3">
+        {error && (
+          <NoticeBanner variant="error" onDismiss={() => setError('')}>
+            {error}
+          </NoticeBanner>
+        )}
+        {actionError && (
+          <NoticeBanner variant="warning" onDismiss={() => setActionError('')}>
+            {actionError}
+          </NoticeBanner>
+        )}
+      </div>
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">

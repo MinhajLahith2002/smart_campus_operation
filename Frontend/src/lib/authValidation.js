@@ -16,6 +16,8 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const studentIdPattern = /^(IT|CS|BM|HM)\d{8}$/;
 const phonePattern = /^\+94 7\d{8}$/;
 const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+const getEncodedBatchYear = (studentId) => studentId.slice(2, 4);
+const getBatchYearSuffix = (batch) => batch.slice(-2);
 
 export const validateLogin = (form) => {
   const errors = {};
@@ -27,6 +29,8 @@ export const validateLogin = (form) => {
 
   if (!form.password) {
     errors.password = 'Password is required.';
+  } else if (!passwordPattern.test(form.password)) {
+    errors.password = 'Use a strong password with uppercase, lowercase, number, and symbol.';
   }
 
   return errors;
@@ -95,7 +99,7 @@ export const validateRegistration = (form) => {
     errors.batch = 'Batch is required.';
   } else if (!/^\d{4}$/.test(batch)) {
     errors.batch = 'Batch must be a 4 digit year.';
-  } else if (studentId.length >= 6 && studentId.slice(2, 6) !== batch) {
+  } else if (studentIdPattern.test(studentId) && getEncodedBatchYear(studentId) !== getBatchYearSuffix(batch)) {
     errors.batch = 'Batch must match the year encoded in the student ID.';
   }
   if (!form.campus) {
@@ -151,7 +155,7 @@ export const validateGoogleOnboarding = (form) => {
     errors.batch = 'Batch is required.';
   } else if (!/^\d{4}$/.test(batch)) {
     errors.batch = 'Batch must be a 4 digit year.';
-  } else if (studentId.length >= 6 && studentId.slice(2, 6) !== batch) {
+  } else if (studentIdPattern.test(studentId) && getEncodedBatchYear(studentId) !== getBatchYearSuffix(batch)) {
     errors.batch = 'Batch must match the year encoded in the student ID.';
   }
   if (!form.campus) {

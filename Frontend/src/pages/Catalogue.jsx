@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock3, Filter, MapPin, Search, Users } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Button, Card, Input, Badge } from '../components/ui/Primitives';
+import { Button, Card, Input, Badge, NoticeBanner } from '../components/ui/Primitives';
 import { ResourceStatusBadge } from '../components/resources/ResourceStatusBadge';
 import {
   RESOURCE_STATUSES,
@@ -123,7 +123,11 @@ export const Catalogue = () => {
         ))}
       </div>
 
-      {error && <Card className="border-danger/20 bg-danger/5 p-5 text-sm text-danger">{error}</Card>}
+      {error && (
+        <NoticeBanner variant="error" onDismiss={() => setError('')}>
+          {error}
+        </NoticeBanner>
+      )}
 
       {loading ? (
         <Card className="p-8 text-sm text-muted-foreground">Loading live resource data...</Card>

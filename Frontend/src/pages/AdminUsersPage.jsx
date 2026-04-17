@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Mail, RefreshCw, Search } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../components/ui/Primitives';
+import { Badge, Button, Card, Input, NoticeBanner } from '../components/ui/Primitives';
 import {
   createTechnicianInvite,
   getAdminUsers,
@@ -137,8 +137,18 @@ export const AdminUsersPage = () => {
         </Card>
       </section>
 
-      {error && <Card className="border-danger/30 bg-danger/5 p-5 text-sm text-danger">{error}</Card>}
-      {actionError && <Card className="border-warning/30 bg-warning/5 p-5 text-sm text-warning">{actionError}</Card>}
+      <div className="space-y-3">
+        {error && (
+          <NoticeBanner variant="error" onDismiss={() => setError('')}>
+            {error}
+          </NoticeBanner>
+        )}
+        {actionError && (
+          <NoticeBanner variant="warning" onDismiss={() => setActionError('')}>
+            {actionError}
+          </NoticeBanner>
+        )}
+      </div>
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">

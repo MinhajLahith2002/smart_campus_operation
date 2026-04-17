@@ -13,6 +13,7 @@ import com.smartcampus.modulec.dto.RegisterRequest;
 import com.smartcampus.modulec.dto.ResetPasswordRequest;
 import com.smartcampus.modulec.security.AuthUserPrincipal;
 import com.smartcampus.modulec.service.AuthService;
+import com.smartcampus.modulec.config.AuthProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -34,17 +35,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final AuthProperties authProperties;
 
     @Value("${spring.security.oauth2.client.registration.google.client-id:}")
     private String googleClientId;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, AuthProperties authProperties) {
         this.authService = authService;
+        this.authProperties = authProperties;
     }
 
     @GetMapping("/config")
     public AuthConfigResponse getConfig() {
-        return new AuthConfigResponse(StringUtils.hasText(googleClientId));
+        return new AuthConfigResponse(
+                StringUtils.hasText(googleClientId),
+                Math.max(1, (int) authProperties.getForgotPasswordCooldownSeconds())
+        );
     }
 
     @PostMapping("/login")
@@ -66,8 +72,8 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public AuthMessageResponse forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        authService.requestPasswordReset(request);
+    public AuthMessageResponse forgotPassword(@Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest httpRequest) {
+        authService.requestPasswordReset(request, resolveClientAddress(httpRequest));
         return new AuthMessageResponse("If an account exists for that email, a password reset link has been sent.");
     }
 
@@ -105,5 +111,13 @@ public class AuthController {
                                      HttpServletRequest httpRequest,
                                      HttpServletResponse httpResponse) {
         return authService.acceptTechnicianInvite(request, httpRequest, httpResponse);
+    }
+
+    private String resolveClientAddress(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (StringUtils.hasText(forwarded)) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

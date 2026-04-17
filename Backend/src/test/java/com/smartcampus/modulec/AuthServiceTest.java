@@ -19,6 +19,7 @@ import com.smartcampus.modulec.repository.PasswordResetTokenRepository;
 import com.smartcampus.modulec.repository.TechnicianInviteRepository;
 import com.smartcampus.modulec.service.AuthMailService;
 import com.smartcampus.modulec.service.AuthService;
+import com.smartcampus.modulec.service.AuthThrottleService;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,11 +53,15 @@ class AuthServiceTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private AuthThrottleService authThrottleService;
+
     @MockBean
     private AuthMailService authMailService;
 
     @BeforeEach
     void setUp() {
+        authThrottleService.clearAll();
         technicianInviteRepository.deleteAll();
         passwordResetTokenRepository.deleteAll();
         emailVerificationTokenRepository.deleteAll();
@@ -145,7 +150,7 @@ class AuthServiceTest {
         student.setGoogleId("google-reset");
         authUserRepository.save(student);
 
-        authService.requestPasswordReset(new ForgotPasswordRequest("google-only@campus.edu"));
+        authService.requestPasswordReset(new ForgotPasswordRequest("google-only@campus.edu"), "127.0.0.1");
 
         assertEquals(0, passwordResetTokenRepository.count());
         verify(authMailService, never()).sendPasswordResetEmail(any(), any());
