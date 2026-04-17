@@ -10,7 +10,7 @@ const Catalogue = lazy(() => import('./pages/Catalogue').then((module) => ({ def
 const BookingRequest = lazy(() => import('./pages/BookingRequest').then((module) => ({ default: module.BookingRequest })));
 const MyBookings = lazy(() => import('./pages/MyBookings').then((module) => ({ default: module.MyBookings })));
 const MyTickets = lazy(() => import('./pages/MyTickets').then((module) => ({ default: module.MyTickets })));
-const AuthPage = lazy(() => import('./pages/AuthPage').then((module) => ({ default: module.AuthPage })));
+const AuthPage = lazy(() => import('./pages/auth/AuthPage').then((module) => ({ default: module.AuthPage })));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })));
 const AdminBookingsPage = lazy(() => import('./pages/AdminBookingsPage').then((module) => ({ default: module.AdminBookingsPage })));
 const AdminTicketsPage = lazy(() => import('./pages/AdminTicketsPage').then((module) => ({ default: module.AdminTicketsPage })));
@@ -20,12 +20,12 @@ const ReportIssuePage = lazy(() => import('./pages/ReportIssuePage').then((modul
 const ResourceDetailPage = lazy(() => import('./pages/ResourceDetailPage').then((module) => ({ default: module.ResourceDetailPage })));
 const TicketDetailPage = lazy(() => import('./pages/TicketDetailPage').then((module) => ({ default: module.TicketDetailPage })));
 const TechnicianTicketsPage = lazy(() => import('./pages/TechnicianTicketsPage').then((module) => ({ default: module.TechnicianTicketsPage })));
-const RegisterPage = lazy(() => import('./pages/RegisterPage').then((module) => ({ default: module.RegisterPage })));
-const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })));
-const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
-const InviteSetupPage = lazy(() => import('./pages/InviteSetupPage').then((module) => ({ default: module.InviteSetupPage })));
-const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage').then((module) => ({ default: module.VerifyEmailPage })));
-const OAuthSuccessPage = lazy(() => import('./pages/OAuthSuccessPage').then((module) => ({ default: module.OAuthSuccessPage })));
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage').then((module) => ({ default: module.RegisterPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
+const InviteSetupPage = lazy(() => import('./pages/auth/InviteSetupPage').then((module) => ({ default: module.InviteSetupPage })));
+const VerifyEmailPage = lazy(() => import('./pages/auth/VerifyEmailPage').then((module) => ({ default: module.VerifyEmailPage })));
+const OAuthSuccessPage = lazy(() => import('./pages/auth/OAuthSuccessPage').then((module) => ({ default: module.OAuthSuccessPage })));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage').then((module) => ({ default: module.AdminUsersPage })));
 
 const RouteLoadingScreen = ({ message = 'Loading workspace...' }) => (

@@ -4,18 +4,15 @@ import {
   ArrowRight,
   Building2,
   Chrome,
-  Moon,
   ShieldCheck,
-  Sun,
   UserCog,
   Wrench,
 } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../components/ui/Primitives';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
-import { getAuthConfig, GOOGLE_LOGIN_URL } from '../lib/authApi';
-import { validateLogin } from '../lib/authValidation';
-import { cn } from '../lib/utils';
+import { Badge, Button, Card, Input } from '../../components/ui/Primitives';
+import { Navbar } from '../../components/Navbar';
+import { useAuth } from '../../context/AuthContext';
+import { getAuthConfig, GOOGLE_LOGIN_URL } from '../../lib/authApi';
+import { validateLogin } from '../../lib/authValidation';
 
 const accessModes = [
   {
@@ -42,7 +39,6 @@ export const AuthPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticating } = useAuth();
-  const { theme, setTheme } = useTheme();
   const [form, setForm] = useState({ email: '', password: '' });
   const [touched, setTouched] = useState({});
   const [errors, setErrors] = useState({});
@@ -103,6 +99,8 @@ export const AuthPage = () => {
   return (
     <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
+        <Navbar fixed />
+
         <div className="glass-panel mb-8 flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">Authentication Hub</p>
@@ -110,11 +108,6 @@ export const AuthPage = () => {
             <p className="mt-2 text-sm text-muted-foreground">
               Local sign-in uses email and password, Google onboarding is student-only, and the backend decides the account role and status for every session.
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeChip active={theme === 'light'} icon={Sun} label="Light" onClick={() => setTheme('light')} />
-            <ThemeChip active={theme === 'dark'} icon={Moon} label="Dark" onClick={() => setTheme('dark')} />
-            <ThemeChip active={theme === 'system'} icon={ShieldCheck} label="System" onClick={() => setTheme('system')} />
           </div>
         </div>
 
@@ -248,37 +241,12 @@ export const AuthPage = () => {
               </div>
             </Card>
 
-            <Card className="bg-slate-950 p-7 text-white">
-              <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Auth policy</p>
-              <div className="mt-4 space-y-3 text-sm leading-7 text-slate-300">
-                <p>Students choose local registration or Google onboarding and keep that sign-in method for the account.</p>
-                <p>Technician accounts stay invite-controlled, and admin access remains seeded from backend configuration rather than public registration.</p>
-              </div>
-            </Card>
-
-            <p className="text-sm text-muted-foreground">
-              Need the public overview first? <Link to="/" className="font-semibold text-primary">Return to the landing page</Link>.
-            </p>
           </section>
         </div>
       </div>
     </div>
   );
 };
-
-const ThemeChip = ({ active, icon: Icon, label, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-all',
-      active ? 'border-primary bg-primary text-white' : 'border-border bg-white/50 text-foreground dark:bg-white/5'
-    )}
-  >
-    <Icon size={15} />
-    {label}
-  </button>
-);
 
 const GoogleMark = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">

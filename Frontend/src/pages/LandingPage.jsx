@@ -8,11 +8,12 @@ import {
   CalendarClock,
   CheckCircle2,
   LayoutDashboard,
-  Radar,
   Shield,
   Wrench,
 } from 'lucide-react';
-import { Button, Card, Badge } from '../components/ui/Primitives';
+import { Card, Badge } from '../components/ui/Primitives';
+import { Navbar } from '../components/Navbar';
+import { useAuth } from '../context/AuthContext';
 
 const heroMetrics = [
   { label: 'Active spaces', value: '128', hint: 'lecture halls, labs, and shared rooms' },
@@ -46,29 +47,19 @@ const accessModes = [
 
 export const LandingPage = () => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
-  const handleLogin = () => {
-    navigate('/auth');
-  };
+  const handleAuthEntry = () => navigate('/auth');
+  const handleWorkspace = () => navigate('/dashboard');
+  const handleAccessAction = () => (isAuthenticated ? handleWorkspace() : handleAuthEntry());
 
   return (
-    <div className="min-h-screen overflow-hidden">
+    <div className="min-h-screen overflow-x-hidden">
       <section className="relative px-4 pb-16 pt-8 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
-          <div className="glass-panel mb-8 flex items-center justify-between gap-4 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
-                <Radar size={20} />
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">Smart Campus Operations</p>
-                <p className="text-sm font-semibold">Unified service desk for rooms, assets, and maintenance</p>
-              </div>
-            </div>
-            <Badge variant="info">Version 1 concept build</Badge>
-          </div>
+          <Navbar fixed />
 
-          <div className="grid items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
+          <div id="overview" className="grid scroll-mt-28 items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
             <motion.div
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
@@ -85,20 +76,13 @@ export const LandingPage = () => {
                 This frontend is now oriented around the handover idea: a smart campus control layer where people discover spaces, submit requests, respond to issues, and monitor system health without jumping between disconnected tools.
               </p>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-                The handover also separates authentication, authorization, and theme behavior into its own module, so sign-in now happens on a dedicated role-aware access page instead of directly from this public overview.
+                Authentication is now policy-driven: students use local registration or Google onboarding, technicians are invite-only, and admins stay backend-controlled.
               </p>
 
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Button size="lg" className="gap-2" onClick={handleLogin}>
-                  Go to student or staff sign-in
-                  <ArrowRight size={18} />
-                </Button>
-                <Button variant="outline" size="lg" onClick={handleLogin}>
-                  Go to admin sign-in
-                </Button>
-                <Button variant="ghost" size="lg" onClick={handleLogin}>
-                  Go to technician sign-in
-                </Button>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Badge variant="neutral">Students: local registration or Google onboarding</Badge>
+                <Badge variant="neutral">Technicians: admin invite only</Badge>
+                <Badge variant="neutral">Admins: backend bootstrap only</Badge>
               </div>
 
               <div className="mt-10 grid gap-4 sm:grid-cols-3">
@@ -167,7 +151,7 @@ export const LandingPage = () => {
         </div>
       </section>
 
-      <section className="border-y border-border bg-white/35 px-4 py-20 backdrop-blur-sm sm:px-6 lg:px-8 dark:bg-white/5">
+      <section id="modules" className="scroll-mt-28 border-y border-border bg-white/35 px-4 py-20 backdrop-blur-sm sm:px-6 lg:px-8 dark:bg-white/5">
         <div className="mx-auto max-w-7xl">
           <div className="mb-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -194,13 +178,13 @@ export const LandingPage = () => {
         </div>
       </section>
 
-      <section className="px-4 py-20 sm:px-6 lg:px-8">
+      <section id="access-paths" className="scroll-mt-28 px-4 py-20 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="surface-strong p-8">
             <div className="eyebrow mb-4">Access paths</div>
-            <h2 className="section-title">Three role entry points, one shared operational backbone.</h2>
+            <h2 className="section-title">Three role entry views, one shared operational backbone.</h2>
             <p className="mt-4 text-sm leading-7 text-muted-foreground">
-              The handover emphasizes permission-aware workflows. The redesigned entry lets each role land in the same ecosystem while seeing the right controls and priorities.
+              Students can onboard publicly through the controlled auth flow, while technician and admin access remain protected by invitation or bootstrap policy before they ever reach the workspace.
             </p>
           </div>
 
@@ -208,7 +192,7 @@ export const LandingPage = () => {
             {accessModes.map((mode) => (
               <button
                 key={mode.role}
-                onClick={handleLogin}
+                onClick={handleAccessAction}
                 className="premium-card flex items-start justify-between gap-4 p-6 text-left hover:-translate-y-0.5"
               >
                 <div>
