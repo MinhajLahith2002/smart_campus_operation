@@ -38,13 +38,16 @@ public class AuthController {
     @Value("${spring.security.oauth2.client.registration.google.client-id:}")
     private String googleClientId;
 
+    @Value("${spring.security.oauth2.client.registration.google.client-secret:}")
+    private String googleClientSecret;
+
     public AuthController(AuthService authService) {
         this.authService = authService;
     }
 
     @GetMapping("/config")
     public AuthConfigResponse getConfig() {
-        return new AuthConfigResponse(StringUtils.hasText(googleClientId));
+        return new AuthConfigResponse(StringUtils.hasText(googleClientId) && StringUtils.hasText(googleClientSecret));
     }
 
     @PostMapping("/login")
@@ -107,3 +110,4 @@ public class AuthController {
         return authService.acceptTechnicianInvite(request, httpRequest, httpResponse);
     }
 }
+

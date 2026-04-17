@@ -4,9 +4,21 @@ import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Calendar, Clock, Users, Info, ArrowLeft, CheckCircle2, MapPin, ShieldCheck, ClipboardList, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
-import { createBooking, getResource, getBooking, updateBooking } from '../lib/operationsApi';
+import { createBooking, getResource as getBookingResource, getBooking, updateBooking, getResources as getBookingResources } from '../lib/operationsApi';
 import { toBackendRole } from '../lib/moduleCApi';
-import { formatAvailabilityWindow } from '../lib/moduleAApi';
+import { getResource as getCatalogueResource, formatAvailabilityWindow } from '../lib/moduleAApi';
+
+const normaliseName = (value) => `${value || ''}`.trim().toLowerCase();
+
+const toBookingDisplayResource = (resource) => ({
+  ...resource,
+  availabilityWindow: resource.availabilityWindow || {
+    daysOfWeek: [],
+    openTime: resource.availableFrom ? resource.availableFrom.slice(0, 5) : '--:--',
+    closeTime: resource.availableTo ? resource.availableTo.slice(0, 5) : '--:--',
+    notes: '',
+  },
+});
 
 export const BookingRequest = () => {
   const [searchParams] = useSearchParams();
@@ -33,25 +45,55 @@ export const BookingRequest = () => {
 
   useEffect(() => {
     let active = true;
+
     const loadResource = async () => {
       if (!resourceId) {
         setLoading(false);
+        setLoadError('Choose a resource from the catalogue to start a booking.');
         return;
       }
+
       try {
-        const data = await getResource(resourceId);
+        const bookingResource = await getBookingResource(resourceId);
         if (!active) return;
-        setResource(data);
-        setFormData((current) => ({ ...current, attendees: Math.min(current.attendees, data.capacity || 1) || 1 }));
-      } catch (err) {
-        if (active) {
-          setError(err.message || 'Unable to load the selected resource.');
-          setLoadError(err.message || 'Unable to refresh resource details.');
+        const normalized = toBookingDisplayResource(bookingResource);
+        setResource(normalized);
+        setLoadError('');
+        setFormData((current) => ({ ...current, attendees: Math.min(current.attendees, normalized.capacity || 1) || 1 }));
+      } catch (_) {
+        try {
+          const [catalogueResource, bookingResources] = await Promise.all([
+            getCatalogueResource(resourceId),
+            getBookingResources(),
+          ]);
+          if (!active) return;
+
+          const matchedBookingResource = bookingResources.find((item) => normaliseName(item.name) === normaliseName(catalogueResource.name));
+          if (!matchedBookingResource) {
+            throw new Error('This catalogue item is visible, but it is not connected to the booking service yet.');
+          }
+
+          const mergedResource = toBookingDisplayResource({
+            ...matchedBookingResource,
+            imageUrl: matchedBookingResource.imageUrl || catalogueResource.imageUrl,
+            availabilityWindow: catalogueResource.availabilityWindow,
+            location: matchedBookingResource.location || catalogueResource.location,
+          });
+
+          setResource(mergedResource);
+          setLoadError('Booking context was matched from the catalogue record so you can continue this request normally.');
+          setFormData((current) => ({ ...current, attendees: Math.min(current.attendees, mergedResource.capacity || 1) || 1 }));
+        } catch (fallbackError) {
+          if (!active) return;
+          const message = fallbackError.message || 'Unable to load the selected resource.';
+          setError(message);
+          setLoadError(message);
         }
       } finally {
         if (active) setLoading(false);
       }
     };
+
     loadResource();
     return () => {
       active = false;
@@ -92,6 +134,15 @@ export const BookingRequest = () => {
     return '';
   }, [formData, resource]);
 
+  const conflictNotice = useMemo(() => {
+    if (!error) return '';
+    const normalized = error.toLowerCase();
+    if (normalized.includes('conflict') || normalized.includes('already reserved') || normalized.includes('waiting for approval')) {
+      return 'That time slot is already being held for this resource. Please choose a different start/end time or another date.';
+    }
+    return '';
+  }, [error]);
+
   if (loading) {
     return <Card className="mx-auto max-w-4xl p-8 text-sm text-muted-foreground">Loading resource booking context...</Card>;
   }
@@ -100,7 +151,7 @@ export const BookingRequest = () => {
     return (
       <div className="py-20 text-center">
         <h2 className="text-2xl font-bold">Resource not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">{error || loadError || 'The selected resource could not be loaded.'}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{loadError || error || 'The selected resource could not be loaded.'}</p>
         <Button variant="ghost" onClick={() => navigate('/catalogue')} className="mt-4">
           Back to Catalogue
         </Button>
@@ -206,7 +257,10 @@ export const BookingRequest = () => {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card className="bg-white/70 p-8 dark:bg-white/5">
-            <h2 className="mb-6 text-2xl font-semibold">Request details</h2>
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <h2 className="text-2xl font-semibold">Request details</h2>
+              {fetchingBooking && <Badge variant="info">Loading booking</Badge>}
+            </div>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-2">
@@ -282,7 +336,14 @@ export const BookingRequest = () => {
                 </div>
               </div>
 
-              {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
+              {conflictNotice ? (
+                <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-4 text-sm text-foreground">
+                  <p className="font-semibold text-primary">Scheduling notice</p>
+                  <p className="mt-2 leading-7 text-muted-foreground">{conflictNotice}</p>
+                </div>
+              ) : error ? (
+                <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>
+              ) : null}
 
               <div className="pt-2">
                 <Button type="submit" className="w-full gap-2 py-6 text-lg" isLoading={isSubmitting}>
@@ -298,7 +359,7 @@ export const BookingRequest = () => {
           <Card className="overflow-hidden p-0 bg-white/70 dark:bg-white/5">
             <img src={resource.imageUrl} alt="" className="h-40 w-full object-cover" />
             <div className="p-6">
-              <Badge variant="info" className="mb-2">{resource.type.replace('_', ' ')}</Badge>
+              <Badge variant="info" className="mb-2">{`${resource.type || ''}`.replace('_', ' ')}</Badge>
               <h3 className="mb-2 text-xl font-semibold">{resource.name}</h3>
               <div className="space-y-3 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
@@ -324,6 +385,7 @@ export const BookingRequest = () => {
               <li>Cancellations are allowed up to 2 hours before the start time.</li>
               <li>Users are responsible for the equipment and cleanliness of the facility.</li>
               <li>Approval is subject to availability and campus priorities.</li>
+              <li>Overlapping requests for the same resource, date, and time are blocked, even if the earlier request is still pending.</li>
             </ul>
           </Card>
 

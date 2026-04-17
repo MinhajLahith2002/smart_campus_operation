@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://127.0.0.1:8082';
+const API_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8082';
 export const MODULE_C_API_BASE = import.meta.env.VITE_MODULE_C_API_URL || `${API_BASE}/api/module-c/tickets`;
 
 const roleMap = {

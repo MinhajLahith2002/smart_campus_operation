@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://127.0.0.1:8082';
+const API_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8082';
 const AUTH_BASE = `${API_BASE}/api/auth`;
 
 export const GOOGLE_LOGIN_URL = `${API_BASE}/oauth2/authorization/google`;
@@ -65,3 +65,4 @@ export const resendTechnicianInvite = async (inviteId) => request(`/admin/invite
 export const revokeTechnicianInvite = async (inviteId) => request(`/admin/invites/${inviteId}/revoke`, { method: 'POST' });
 
 export { API_BASE };
+

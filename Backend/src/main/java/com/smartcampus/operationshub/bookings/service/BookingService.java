@@ -283,7 +283,7 @@ public class BookingService {
         if (request.startTime().isBefore(resource.getAvailableFrom()) || request.endTime().isAfter(resource.getAvailableTo())) {
             throw new IllegalArgumentException("Booking must fit within the resource availability window.");
         }
-        ensureNoApprovedConflict(request.resourceId(), request.date(), request.startTime(), request.endTime(), bookingId);
+        ensureNoActiveConflict(request.resourceId(), request.date(), request.startTime(), request.endTime(), bookingId);
     }
 
     private void ensureNoApprovedConflict(BookingRecord booking, Long bookingId) {
@@ -296,7 +296,28 @@ public class BookingService {
                 .filter(existing -> existing.getStatus() == BookingStatus.APPROVED)
                 .anyMatch(existing -> startTime.isBefore(existing.getEndTime()) && endTime.isAfter(existing.getStartTime()));
         if (hasConflict) {
-            throw new IllegalArgumentException("This booking conflicts with an existing approved reservation.");
+            throw new IllegalArgumentException("This booking conflicts with an already approved reservation for the same resource and time.");
+        }
+    }
+
+    private void ensureNoActiveConflict(@NonNull Long resourceId, java.time.LocalDate date, LocalTime startTime, LocalTime endTime, Long bookingId) {
+        BookingRecord conflictingBooking = bookingRecordRepository.findByBookingDateAndResourceId(date, resourceId).stream()
+                .filter(existing -> bookingId == null || !existing.getId().equals(bookingId))
+                .filter(existing -> existing.getStatus() == BookingStatus.PENDING || existing.getStatus() == BookingStatus.APPROVED)
+                .filter(existing -> startTime.isBefore(existing.getEndTime()) && endTime.isAfter(existing.getStartTime()))
+                .findFirst()
+                .orElse(null);
+
+        if (conflictingBooking != null) {
+            throw new IllegalArgumentException(
+                    "This slot is already reserved or waiting for approval for another booking on "
+                            + date
+                            + " from "
+                            + conflictingBooking.getStartTime()
+                            + " to "
+                            + conflictingBooking.getEndTime()
+                            + ". Please choose a different time."
+            );
         }
     }
 
@@ -359,3 +380,4 @@ public class BookingService {
         );
     }
 }
+

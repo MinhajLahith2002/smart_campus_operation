@@ -3,9 +3,9 @@ import { Search, Filter, Users, MapPin, Info, ArrowRight, Clock3, Layers3 } from
 import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { getResources, getResourceSummary } from '../lib/operationsApi';
 import { ResourceStatusBadge } from '../components/resources/ResourceStatusBadge';
 import {
+  getResources,
   RESOURCE_STATUSES,
   RESOURCE_TYPES,
   formatAvailabilityWindow,
@@ -34,10 +34,8 @@ export const Catalogue = () => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [resourceData, summaryData] = await Promise.all([
-          getResources(filters),
-          getResourceSummary(),
-        ]);
+        const resourceData = await getResources(filters);
+        const summaryData = null;
         if (!ignore) {
           setResources(resourceData);
           setSummary(summaryData);
@@ -239,5 +237,4 @@ const ResourceMeta = ({ icon, label, value }) => (
     <p className="mt-2 text-sm font-medium">{value}</p>
   </div>
 );
-
 
