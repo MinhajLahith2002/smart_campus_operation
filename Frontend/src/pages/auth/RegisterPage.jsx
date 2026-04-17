@@ -211,12 +211,29 @@ export const RegisterPage = () => {
             )}
             <div className="mt-8 flex flex-col gap-3">
               {!submitted.emailDeliveryEnabled && submitted.verificationLinkPreview ? (
-                <Button onClick={() => window.location.assign(submitted.verificationLinkPreview)}>
+                <Button
+                  className="auth-primary-button w-full rounded-full text-white"
+                  size="lg"
+                  onClick={() => window.location.assign(submitted.verificationLinkPreview)}
+                >
                   Verify Account Now
                 </Button>
               ) : null}
-              <Button onClick={() => navigate('/auth')}>Back to Sign In</Button>
-              <Button variant="outline" onClick={() => navigate('/')}>Return to Landing Page</Button>
+              <Button
+                className="auth-primary-button w-full rounded-full text-white"
+                size="lg"
+                onClick={() => navigate('/auth')}
+              >
+                Back to Sign In
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full rounded-full border-[color:var(--auth-input-border)] bg-[var(--auth-chip-bg)] text-foreground"
+                size="lg"
+                onClick={() => navigate('/')}
+              >
+                Return to Landing Page
+              </Button>
             </div>
           </div>
         </div>
@@ -245,7 +262,13 @@ export const RegisterPage = () => {
               <h1 className="text-3xl font-semibold">Google onboarding unavailable</h1>
               <p className="mt-4 text-sm leading-7 text-muted-foreground">{googleSessionError}</p>
               <div className="mt-8 flex justify-center">
-                <Button onClick={() => navigate('/auth')}>Back to Sign In</Button>
+                <Button
+                  className="auth-primary-button rounded-full px-8 text-white"
+                  size="lg"
+                  onClick={() => navigate('/auth')}
+                >
+                  Back to Sign In
+                </Button>
               </div>
             </Card>
           </div>

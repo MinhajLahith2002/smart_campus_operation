@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, MailCheck } from 'lucide-react';
 import { Button, Card } from '../../components/ui/Primitives';
+import { Navbar } from '../../components/Navbar';
 import { verifyEmailToken } from '../../lib/authApi';
 
 export const VerifyEmailPage = () => {
@@ -35,17 +36,22 @@ export const VerifyEmailPage = () => {
   }, [token]);
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-16 sm:px-6">
-      <Card className="bg-white/70 p-8 text-center dark:bg-white/5">
+    <div className="auth-page min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <Navbar fixed />
+        <div className="mx-auto max-w-xl py-8">
+      <Card className="bg-[linear-gradient(180deg,var(--auth-surface-strong),var(--auth-surface))] p-8 text-center">
         <div className={`mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full ${status === 'success' ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'}`}>
           {status === 'success' ? <CheckCircle2 size={48} /> : <MailCheck size={48} />}
         </div>
         <h1 className="text-3xl font-semibold">{status === 'success' ? 'Email verified' : status === 'error' ? 'Verification failed' : 'Verifying email'}</h1>
-        <p className="mt-4 text-sm leading-7 text-muted-foreground">{message}</p>
+        <p className="auth-copy mt-4 text-sm leading-7">{message}</p>
         <div className="mt-8 flex justify-center">
-          <Link to="/auth"><Button>Back to Sign In</Button></Link>
+          <Link to="/auth"><Button className="auth-primary-button rounded-full px-8 text-white" size="lg">Back to Sign In</Button></Link>
         </div>
       </Card>
+        </div>
+      </div>
     </div>
   );
 };

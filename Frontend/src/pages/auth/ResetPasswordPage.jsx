@@ -52,20 +52,20 @@ export const ResetPasswordPage = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+    <div className="auth-page min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <Navbar fixed />
 
         <div className="mx-auto max-w-xl py-8">
-          <Link to="/auth" className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary">
+          <Link to="/auth" className="auth-link mb-6 inline-flex items-center gap-2 text-sm font-semibold">
             <ArrowLeft size={16} /> Back to sign in
           </Link>
 
-          <Card className="bg-white/70 p-8 dark:bg-white/5">
+          <Card className="bg-[linear-gradient(180deg,var(--auth-surface-strong),var(--auth-surface))] p-8">
             <div className="mb-6 flex items-center gap-3">
-              <div className="rounded-2xl bg-primary/10 p-3 text-primary"><ShieldCheck size={20} /></div>
+              <div className="rounded-2xl bg-[rgba(47,91,255,0.1)] p-3 text-[var(--auth-accent)] dark:bg-[rgba(125,167,255,0.14)]"><ShieldCheck size={20} /></div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">Reset password</p>
+                <p className="auth-kicker text-xs font-bold uppercase tracking-[0.24em]">Reset password</p>
                 <h1 className="mt-1 text-2xl font-semibold">Choose a new password</h1>
               </div>
             </div>
@@ -86,17 +86,27 @@ export const ResetPasswordPage = () => {
             <form className="space-y-5" onSubmit={handleSubmit}>
               <label className="space-y-2 text-sm font-semibold">
                 <span>New Password</span>
-                <PasswordInput value={form.password} onChange={(event) => applyFieldUpdate('password', event.target.value)} onBlur={() => setTouched((current) => ({ ...current, password: true }))} />
+                <PasswordInput
+                  className="auth-input h-12 rounded-2xl px-4 focus-visible:ring-[color:var(--auth-accent)] focus-visible:ring-offset-0"
+                  value={form.password}
+                  onChange={(event) => applyFieldUpdate('password', event.target.value)}
+                  onBlur={() => setTouched((current) => ({ ...current, password: true }))}
+                />
                 {touched.password && errors.password && <p className="text-sm text-danger">{errors.password}</p>}
               </label>
 
               <label className="space-y-2 text-sm font-semibold">
                 <span>Confirm Password</span>
-                <PasswordInput value={form.confirmPassword} onChange={(event) => applyFieldUpdate('confirmPassword', event.target.value)} onBlur={() => setTouched((current) => ({ ...current, confirmPassword: true }))} />
+                <PasswordInput
+                  className="auth-input h-12 rounded-2xl px-4 focus-visible:ring-[color:var(--auth-accent)] focus-visible:ring-offset-0"
+                  value={form.confirmPassword}
+                  onChange={(event) => applyFieldUpdate('confirmPassword', event.target.value)}
+                  onBlur={() => setTouched((current) => ({ ...current, confirmPassword: true }))}
+                />
                 {touched.confirmPassword && errors.confirmPassword && <p className="text-sm text-danger">{errors.confirmPassword}</p>}
               </label>
 
-              <div className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
+              <div className="rounded-[22px] border border-[color:var(--auth-input-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(245,247,251,0.96))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))]">
                 <p className="text-sm font-semibold">Password checklist</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {passwordChecklist.map((item) => (
@@ -106,7 +116,15 @@ export const ResetPasswordPage = () => {
                   ))}
                 </div>
               </div>
-              <Button type="submit" isLoading={submitting} disabled={submitting}>Update Password</Button>
+              <Button
+                type="submit"
+                className="auth-primary-button w-full rounded-full text-white"
+                size="lg"
+                isLoading={submitting}
+                disabled={submitting}
+              >
+                Update Password
+              </Button>
             </form>
           </Card>
         </div>

@@ -126,7 +126,7 @@ export const ForgotPasswordPage = () => {
                     <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                       <Link
                         to="/auth"
-                        className="inline-flex min-h-11 items-center justify-center rounded-full border border-border/80 px-4 text-sm font-semibold transition hover:bg-black/[0.03] dark:border-white/10 dark:hover:bg-white/5"
+                        className="inline-flex min-h-11 items-center justify-center rounded-full border border-[color:var(--auth-input-border)] bg-[var(--auth-chip-bg)] px-4 text-sm font-semibold text-foreground transition hover:bg-white/80 dark:hover:bg-white/10"
                       >
                         Back to login
                       </Link>
@@ -134,7 +134,7 @@ export const ForgotPasswordPage = () => {
                         <button
                           type="button"
                           onClick={() => window.location.assign(GOOGLE_LOGIN_URL)}
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-border/80 px-4 text-sm font-semibold transition hover:bg-black/[0.03] dark:border-white/10 dark:hover:bg-white/5"
+                          className="auth-primary-button inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold text-white transition"
                         >
                           <GoogleMark />
                           Continue with Google
