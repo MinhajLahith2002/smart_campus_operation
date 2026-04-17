@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card } from '../components/ui/Primitives';
-import { useAuth } from '../context/AuthContext';
+import { Button, Card } from '../../components/ui/Primitives';
+import { useAuth } from '../../context/AuthContext';
 
 export const OAuthSuccessPage = () => {
   const navigate = useNavigate();

@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../components/ui/Primitives';
-import { completeGoogleOnboarding, getGoogleOnboarding, registerStudent } from '../lib/authApi';
-import { useAuth } from '../context/AuthContext';
+import { Badge, Button, Card, Input } from '../../components/ui/Primitives';
+import { Navbar } from '../../components/Navbar';
+import { completeGoogleOnboarding, getGoogleOnboarding, registerStudent } from '../../lib/authApi';
+import { useAuth } from '../../context/AuthContext';
 import {
   CAMPUS_OPTIONS,
   FACULTY_OPTIONS,
   getPasswordChecklist,
   validateGoogleOnboarding,
   validateRegistration,
-} from '../lib/authValidation';
+} from '../../lib/authValidation';
 
 const initialForm = {
   fullName: '',
@@ -132,36 +133,54 @@ export const RegisterPage = () => {
 
   if (submitted) {
     return (
-      <div className="mx-auto max-w-xl px-4 py-16 text-center sm:px-6">
-        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-success/10 text-success">
-          <CheckCircle2 size={48} />
-        </div>
-        <h1 className="text-3xl font-semibold">Registration submitted</h1>
-        <p className="mt-4 text-sm leading-7 text-muted-foreground">
-          Your student account was created in a pending verification state. Check your email for the verification link before signing in.
-        </p>
-        <div className="mt-8 flex flex-col gap-3">
-          <Button onClick={() => navigate('/auth')}>Back to Sign In</Button>
-          <Button variant="outline" onClick={() => navigate('/')}>Return to Landing Page</Button>
+      <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <Navbar fixed />
+
+          <div className="mx-auto max-w-xl py-8 text-center">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-success/10 text-success">
+              <CheckCircle2 size={48} />
+            </div>
+            <h1 className="text-3xl font-semibold">Registration submitted</h1>
+            <p className="mt-4 text-sm leading-7 text-muted-foreground">
+              Your student account was created in a pending verification state. Check your email for the verification link before signing in.
+            </p>
+            <div className="mt-8 flex flex-col gap-3">
+              <Button onClick={() => navigate('/auth')}>Back to Sign In</Button>
+              <Button variant="outline" onClick={() => navigate('/')}>Return to Landing Page</Button>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   if (isGoogleMode && googleLoading) {
-    return <div className="px-4 py-16 text-center text-sm text-muted-foreground">Loading Google student onboarding...</div>;
+    return (
+      <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <Navbar fixed />
+          <div className="py-16 text-center text-sm text-muted-foreground">Loading Google student onboarding...</div>
+        </div>
+      </div>
+    );
   }
 
   if (isGoogleMode && googleSessionError) {
     return (
-      <div className="mx-auto max-w-xl px-4 py-16 text-center sm:px-6">
-        <Card className="bg-white/70 p-8 dark:bg-white/5">
-          <h1 className="text-3xl font-semibold">Google onboarding unavailable</h1>
-          <p className="mt-4 text-sm leading-7 text-muted-foreground">{googleSessionError}</p>
-          <div className="mt-8 flex justify-center">
-            <Button onClick={() => navigate('/auth')}>Back to Sign In</Button>
+      <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <Navbar fixed />
+          <div className="mx-auto max-w-xl py-8 text-center">
+            <Card className="bg-white/70 p-8 dark:bg-white/5">
+              <h1 className="text-3xl font-semibold">Google onboarding unavailable</h1>
+              <p className="mt-4 text-sm leading-7 text-muted-foreground">{googleSessionError}</p>
+              <div className="mt-8 flex justify-center">
+                <Button onClick={() => navigate('/auth')}>Back to Sign In</Button>
+              </div>
+            </Card>
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
@@ -169,6 +188,8 @@ export const RegisterPage = () => {
   return (
     <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-8">
+        <Navbar fixed />
+
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary">
           <ArrowLeft size={16} /> Back
         </button>

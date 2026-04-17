@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, MailCheck } from 'lucide-react';
-import { Button, Card } from '../components/ui/Primitives';
-import { verifyEmailToken } from '../lib/authApi';
+import { Button, Card } from '../../components/ui/Primitives';
+import { verifyEmailToken } from '../../lib/authApi';
 
 export const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();

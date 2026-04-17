@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Wrench } from 'lucide-react';
-import { Badge, Button, Card, Input } from '../components/ui/Primitives';
-import { acceptInvite, getInviteDetails } from '../lib/authApi';
-import { getPasswordChecklist, validatePasswordReset } from '../lib/authValidation';
+import { Badge, Button, Card, Input } from '../../components/ui/Primitives';
+import { acceptInvite, getInviteDetails } from '../../lib/authApi';
+import { getPasswordChecklist, validatePasswordReset } from '../../lib/authValidation';
 
 export const InviteSetupPage = () => {
   const navigate = useNavigate();
