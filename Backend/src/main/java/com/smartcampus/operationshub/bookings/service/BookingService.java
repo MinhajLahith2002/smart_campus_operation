@@ -1,8 +1,10 @@
 package com.smartcampus.operationshub.bookings.service;
 
 import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.bookings.domain.BookingActivity;
 import com.smartcampus.operationshub.bookings.domain.BookingRecord;
 import com.smartcampus.operationshub.bookings.domain.BookingStatus;
+import com.smartcampus.operationshub.bookings.dto.BookingActivityResponse;
 import com.smartcampus.operationshub.bookings.dto.BookingDecisionRequest;
 import com.smartcampus.operationshub.bookings.dto.BookingQuery;
 import com.smartcampus.operationshub.bookings.dto.BookingResponse;
@@ -64,6 +66,9 @@ public class BookingService {
         booking.setCreatedAt(OffsetDateTime.now());
         booking.setUpdatedAt(booking.getCreatedAt());
 
+        addActivity(booking, booking.getRequesterName(), booking.getRequesterRole(), "BOOKING_CREATED",
+                "Booking request submitted for " + booking.getResourceName() + ".");
+
         BookingRecord saved = bookingRecordRepository.save(booking);
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
                 "Booking Request Submitted",
@@ -97,6 +102,9 @@ public class BookingService {
         booking.setCancellationRequestNote(null);
         booking.setCancellationRequestedAt(null);
 
+        addActivity(booking, booking.getRequesterName(), booking.getRequesterRole(), "BOOKING_UPDATED",
+                "Pending booking request details were updated by the requester.");
+
         BookingRecord saved = bookingRecordRepository.save(booking);
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
                 "Booking Request Updated",
@@ -121,6 +129,10 @@ public class BookingService {
         booking.setCancellationRequestNote(null);
         booking.setCancellationRequestedAt(null);
         booking.setUpdatedAt(OffsetDateTime.now());
+
+        addActivity(booking, request.actorName(), request.actorRole(), "BOOKING_APPROVED",
+                request.note() != null ? request.note() : "Booking request approved by administration.");
+
         BookingRecord saved = bookingRecordRepository.save(booking);
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
                 "Booking Approved",
@@ -143,6 +155,10 @@ public class BookingService {
         booking.setCancellationRequestNote(null);
         booking.setCancellationRequestedAt(null);
         booking.setUpdatedAt(OffsetDateTime.now());
+
+        addActivity(booking, request.actorName(), request.actorRole(), "BOOKING_REJECTED",
+                "Rejected: " + booking.getRejectionReason());
+
         BookingRecord saved = bookingRecordRepository.save(booking);
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
                 "Booking Rejected",
@@ -169,6 +185,10 @@ public class BookingService {
         booking.setUpdatedAt(OffsetDateTime.now());
         booking.setCancellationRequestNote(null);
         booking.setCancellationRequestedAt(null);
+
+        addActivity(booking, request.actorName(), request.actorRole(), "BOOKING_CANCELLED",
+                request.note() != null ? request.note() : "Booking cancelled.");
+
         BookingRecord saved = bookingRecordRepository.save(booking);
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
                 "Booking Cancelled",
@@ -195,6 +215,10 @@ public class BookingService {
         booking.setCancellationRequestNote(request.note().trim());
         booking.setCancellationRequestedAt(OffsetDateTime.now());
         booking.setUpdatedAt(booking.getCancellationRequestedAt());
+
+        addActivity(booking, booking.getRequesterName(), booking.getRequesterRole(), "CANCELLATION_REQUESTED",
+                "Requester requested cancellation: " + booking.getCancellationRequestNote());
+
         BookingRecord saved = bookingRecordRepository.save(booking);
 
         notificationService.publish(saved.getRequesterId(), saved.getRequesterRole().name(), NotificationType.BOOKING_STATUS,
@@ -297,6 +321,17 @@ public class BookingService {
         booking.setAttendees(request.attendees());
     }
 
+    private void addActivity(BookingRecord booking, String actorName, UserRole actorRole, String action, String detail) {
+        BookingActivity activity = new BookingActivity();
+        activity.setBooking(booking);
+        activity.setActorName(actorName != null ? actorName.trim() : "System");
+        activity.setActorRole(actorRole);
+        activity.setAction(action);
+        activity.setDetail(detail);
+        activity.setCreatedAt(OffsetDateTime.now());
+        booking.getActivities().add(activity);
+    }
+
     private BookingResponse map(BookingRecord booking) {
         return new BookingResponse(
                 booking.getId(),
@@ -317,7 +352,10 @@ public class BookingService {
                 booking.getCancellationRequestNote(),
                 booking.getCancellationRequestedAt(),
                 booking.getCreatedAt(),
-                booking.getUpdatedAt()
+                booking.getUpdatedAt(),
+                booking.getActivities().stream()
+                        .map(a -> new BookingActivityResponse(a.getId(), a.getActorName(), a.getActorRole(), a.getAction(), a.getDetail(), a.getCreatedAt()))
+                        .toList()
         );
     }
 }

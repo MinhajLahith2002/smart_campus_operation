@@ -5,6 +5,7 @@ import com.smartcampus.operationshub.bookings.domain.BookingStatus;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public record BookingResponse(
         Long id,
@@ -25,6 +26,7 @@ public record BookingResponse(
         String cancellationRequestNote,
         OffsetDateTime cancellationRequestedAt,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt
+        OffsetDateTime updatedAt,
+        List<BookingActivityResponse> activities
 ) {
 }

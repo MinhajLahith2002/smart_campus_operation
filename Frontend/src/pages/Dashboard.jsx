@@ -81,10 +81,10 @@ export const Dashboard = () => {
       ? `Welcome back, ${firstName}. Your assigned maintenance queue is ready.`
       : `Welcome back, ${firstName}. Your campus requests and repair updates are in view.`;
   const heroCopy = isAdmin
-    ? 'Module C gives admins the triage and assignment workspace the handover expects, including deeper queue visibility and workflow control.'
+    ? 'Smart Campus Hub gives admins the triage and assignment workspace the handover expects, including deeper queue visibility and workflow control.'
     : isTechnician
-      ? 'Module C now exposes a technician-first route with assigned work, urgency ordering, and resolution flow rather than the admin desk.'
-      : 'Module C now keeps issue reporting, ticket tracking, and closure confirmation in the reporter-facing flow instead of sharing the admin workspace.';
+      ? 'Smart Campus Hub now exposes a technician-first route with assigned work, urgency ordering, and resolution flow rather than the admin desk.'
+      : 'Smart Campus Hub now keeps issue reporting, ticket tracking, and closure confirmation in the reporter-facing flow instead of sharing the admin workspace.';
 
   return (
     <div className="space-y-8">

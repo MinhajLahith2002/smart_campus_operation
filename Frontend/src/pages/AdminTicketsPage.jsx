@@ -158,7 +158,7 @@ export const AdminTicketsPage = () => {
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">Module C admin workspace</div>
+            <div className="eyebrow mb-4">Incident desk admin workspace</div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Triage, assign, and reject when needed without taking over technician or reporter work.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
               The handover calls for a true admin ticket desk, not the same ticket page with extra buttons. This workspace emphasizes high-priority unassigned issues, clean assignment control, and finished outcomes stored separately from live operational work.

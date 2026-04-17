@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { CalendarClock, CheckCircle2, CircleOff, Layers3, MapPin, Users } from 'lucide-react';
+import { CalendarClock, CheckCircle2, CircleOff, History, Layers3, MapPin, Users, X } from 'lucide-react';
 import { Card, Badge, Button, Input } from '../components/ui/Primitives';
 import { approveBooking, getBookingSummary, getBookings, rejectBooking, cancelBooking } from '../lib/operationsApi';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +16,7 @@ export const AdminBookingsPage = () => {
   const [busyBookingId, setBusyBookingId] = useState(null);
   const [rejectionDrafts, setRejectionDrafts] = useState({});
   const [filterMode, setFilterMode] = useState('ALL');
+  const [auditBooking, setAuditBooking] = useState(null);
 
   const loadData = async () => {
     try {
@@ -95,7 +96,7 @@ export const AdminBookingsPage = () => {
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">Module B admin view</div>
+            <div className="eyebrow mb-4">Booking desk admin view</div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Booking Desk gives operations staff a clear approval queue and conflict-aware review surface.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
               The handover calls out booking management, optimized booking rules, and double-booking handling. This page now runs against the live backend approval workflow.
@@ -215,7 +216,9 @@ export const AdminBookingsPage = () => {
                       ) : null}
                       
                       {!isPending && !isCancellationRequested ? (
-                        <Button variant="ghost">View audit trail</Button>
+                        <Button variant="ghost" className="gap-2" onClick={() => setAuditBooking(booking)}>
+                          <History size={16} /> View audit trail
+                        </Button>
                       ) : null}
                     </div>
                   </div>
@@ -224,6 +227,13 @@ export const AdminBookingsPage = () => {
             })}
           </div>
         </section>
+      )}
+
+      {auditBooking && (
+        <AuditTrailModal 
+          booking={auditBooking} 
+          onClose={() => setAuditBooking(null)} 
+        />
       )}
     </div>
   );
@@ -234,4 +244,58 @@ const DeskMetric = ({ label, value, variant }) => (
     <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
     <p className={cn("mt-3 text-3xl font-semibold", variant === 'danger' && "text-danger")}>{value}</p>
   </Card>
+);
+
+const AuditTrailModal = ({ booking, onClose }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-300">
+    <Card className="relative w-full max-w-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xl animate-in zoom-in-95 duration-200">
+      <div className="flex items-center justify-between border-b border-border p-6">
+        <div>
+          <h3 className="text-xl font-semibold">Booking Audit Trail</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Historical activity for #{booking.id} - {booking.resourceName}</p>
+        </div>
+        <button onClick={onClose} className="rounded-full p-2 hover:bg-muted transition-colors">
+          <X size={20} />
+        </button>
+      </div>
+      
+      <div className="max-h-[60vh] overflow-y-auto p-6">
+        <div className="relative space-y-8 before:absolute before:left-3.5 before:top-2 before:h-[calc(100%-16px)] before:w-0.5 before:bg-border">
+          {booking.activities?.length > 0 ? (
+            booking.activities.map((activity, index) => (
+              <div key={activity.id} className="relative pl-10">
+                <div className={cn(
+                  "absolute left-0 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white dark:bg-slate-900",
+                  index === 0 ? "border-primary ring-4 ring-primary/10" : "border-border"
+                )}>
+                  <div className={cn("h-2 w-2 rounded-full", index === 0 ? "bg-primary" : "bg-muted-foreground/40")} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold uppercase tracking-wider text-foreground">{activity.action.replace(/_/g, ' ')}</span>
+                    <Badge variant="neutral" className="px-1.5 py-0.5 text-[10px]">{activity.actorRole}</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{activity.detail}</p>
+                  <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-muted-foreground/60">
+                    <span className="text-foreground/80">{activity.actorName}</span>
+                    <span>·</span>
+                    <span>{format(new Date(activity.createdAt), 'MMM d, yyyy · HH:mm')}</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">No historical activities recorded for this booking yet.</p>
+              <p className="mt-2 text-xs text-muted-foreground/60 italic">Audit tracking started on Apr 17, 2026.</p>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="border-t border-border bg-muted/30 p-4 flex justify-end">
+        <Button onClick={onClose}>Close trail</Button>
+      </div>
+    </Card>
+  </div>
 );

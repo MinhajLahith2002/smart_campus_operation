@@ -72,7 +72,7 @@ export const MyTickets = () => {
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">Module C user workspace</div>
+            <div className="eyebrow mb-4">Incident hub user workspace</div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Track your incidents with visible progress, evidence context, and clear next-step decisions.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
               The handover treats the user view as more than a simple list. Your tickets now surface status, evidence references, latest activity, and the resolution flow you need to confirm or reopen issues.

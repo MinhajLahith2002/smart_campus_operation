@@ -285,7 +285,7 @@ export const ReportIssuePage = () => {
 
     if (Object.keys(nextErrors).length) {
       setFieldErrors(nextErrors);
-      setError('Please correct the highlighted Module C validation issues before submitting.');
+      setError('Please correct the highlighted validation issues before submitting.');
       return;
     }
 
@@ -336,7 +336,7 @@ export const ReportIssuePage = () => {
         <p className="mb-8 text-muted-foreground">
           {isEditing
             ? 'Your open ticket was updated successfully before admin or technician work began.'
-            : 'Your maintenance request entered Module C with the right asset, exact incident spot, and session context for the admin and technician workflow.'}
+            : 'Your maintenance request entered the incident system with the right asset, exact incident spot, and session context for the admin and technician workflow.'}
         </p>
         <div className="space-y-3">
           <Button className="w-full" onClick={() => navigate(isEditing ? `/tickets/${ticketId}` : '/tickets/my')}>{isEditing ? 'View Ticket Detail' : 'View My Tickets'}</Button>
@@ -356,7 +356,7 @@ export const ReportIssuePage = () => {
         {loadingTicket && <div className="mb-4 text-sm text-muted-foreground">Loading ticket for editing...</div>}
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">{isEditing ? 'Module C ticket edit' : 'Module C incident intake'}</div>
+            <div className="eyebrow mb-4">{isEditing ? 'Incident edit' : 'Incident intake'}</div>
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{isEditing ? 'Edit your open ticket before operational work begins.' : 'Raise a ticket only after linking it to the right booking or asset.'}</h1>
               {safetyMode && <Badge variant="danger">Safety mode</Badge>}

@@ -179,7 +179,7 @@ export const AppShell = ({ children }) => {
                     Operations grid
                   </div>
                   <p className="text-xl font-semibold tracking-tight">Smart Campus Hub</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Module C now adapts to reporter, admin, and technician responsibility.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Smart Campus Hub now adapts to reporter, admin, and technician responsibility.</p>
                 </div>
               )}
               <Button variant="ghost" size="icon" onClick={() => setCollapsed((value) => !value)} className="shrink-0">
@@ -314,7 +314,7 @@ export const AppShell = ({ children }) => {
                   <span className="h-2 w-2 rounded-full bg-success" />
                   Live
                 </div>
-                <p className="mt-1 text-sm font-medium text-foreground">Module C role boundaries active</p>
+                <p className="mt-1 text-sm font-medium text-foreground">Smart Campus Hub role boundaries active</p>
               </div>
 
               <div className="glass-panel flex items-center gap-3 px-3 py-2">

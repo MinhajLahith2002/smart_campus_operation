@@ -149,7 +149,7 @@ export const AuthPage = () => {
       <div className="mx-auto max-w-7xl">
         <div className="glass-panel mb-8 flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">Module E</p>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">Authentication Hub</p>
             <h1 className="mt-2 text-2xl font-semibold">Authentication, Authorization, and Theme</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               The handover separates roles, permission boundaries, and theme rules, so the sign-in experience now exposes all three clearly.

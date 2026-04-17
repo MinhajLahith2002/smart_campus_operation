@@ -10,6 +10,11 @@ import jakarta.persistence.Id;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 
 @Entity
 public class BookingRecord {
@@ -42,6 +47,10 @@ public class BookingRecord {
     private OffsetDateTime cancellationRequestedAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("createdAt DESC")
+    private List<BookingActivity> activities = new ArrayList<>();
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -81,4 +90,7 @@ public class BookingRecord {
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public List<BookingActivity> getActivities() { return activities; }
+    public void setActivities(List<BookingActivity> activities) { this.activities = activities; }
 }

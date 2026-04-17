@@ -259,7 +259,7 @@ export const TicketDetailPage = () => {
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">Module C case file</div>
+            <div className="eyebrow mb-4">Incident case file</div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL' ? 'danger' : ticket.priority === 'MEDIUM' ? 'warning' : 'neutral'}>{ticket.priority} priority</Badge>
               <Badge variant={statusBadgeVariant(ticket.status)}>{formatTicketStatusLabel(ticket.status)}</Badge>

@@ -83,7 +83,7 @@ export const NotificationsPage = () => {
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">Module D</div>
+            <div className="eyebrow mb-4">Notification Hub</div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Signals and notifications keep each role aligned with live booking and maintenance events.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
               The handover calls out notifications as a dedicated module. This screen now reads from the backend notification feed instead of a static placeholder queue.

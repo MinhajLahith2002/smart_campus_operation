@@ -159,6 +159,7 @@ public class SeedConfig {
         activity.setActorRole(actorRole);
         activity.setAction(action);
         activity.setDetail(detail);
+        activity.setCreatedAt(OffsetDateTime.now());
         return activity;
     }
 }

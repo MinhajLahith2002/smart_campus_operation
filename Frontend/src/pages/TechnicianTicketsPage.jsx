@@ -91,7 +91,7 @@ export const TechnicianTicketsPage = () => {
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">Module C technician queue</div>
+            <div className="eyebrow mb-4">Incident hub technician queue</div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Focus only on the work assigned to you and move each repair clearly from assigned to resolved.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
               This queue is now limited to live technician work only. Rejected, closed, and already resolved tickets do not stay here, so the technician sees only actionable tasks.
