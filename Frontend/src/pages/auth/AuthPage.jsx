@@ -4,30 +4,41 @@ import {
   ArrowRight,
   Building2,
   Chrome,
+  Moon,
   ShieldCheck,
+  Sun,
   UserCog,
   Wrench,
 } from 'lucide-react';
 import { Badge, Button, Card, Input } from '../../components/ui/Primitives';
 import { Navbar } from '../../components/Navbar';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { getAuthConfig, GOOGLE_LOGIN_URL } from '../../lib/authApi';
+import { getRoleCredentials } from '../../lib/authDefaults';
 import { validateLogin } from '../../lib/authValidation';
+import { cn } from '../../lib/utils';
 
 const accessModes = [
   {
+    key: 'student',
+    role: 'USER',
     title: 'Student / Staff',
     icon: Building2,
     badge: 'Student onboarding',
     copy: 'Students can create one account through local registration or Google onboarding. Each student account keeps a single sign-in method instead of linking both.',
   },
   {
+    key: 'admin',
+    role: 'ADMIN',
     title: 'Operations Admin',
     icon: UserCog,
     badge: 'Local only',
     copy: 'Admin access comes from backend bootstrap configuration and uses controlled local sign-in only.',
   },
   {
+    key: 'technician',
+    role: 'TECHNICIAN',
     title: 'Technician',
     icon: Wrench,
     badge: 'Invite only',
@@ -35,11 +46,21 @@ const accessModes = [
   },
 ];
 
+const getModeCredentials = (mode) => {
+  const defaults = getRoleCredentials(mode.role);
+  return {
+    email: defaults.email || '',
+    password: defaults.password || '',
+  };
+};
+
 export const AuthPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticating } = useAuth();
-  const [form, setForm] = useState({ email: '', password: '' });
+  const { theme, setTheme } = useTheme();
+  const [selectedRole, setSelectedRole] = useState(accessModes[0].key);
+  const [form, setForm] = useState(getModeCredentials(accessModes[0]));
   const [touched, setTouched] = useState({});
   const [errors, setErrors] = useState({});
   const [authError, setAuthError] = useState('');
@@ -80,6 +101,14 @@ export const AuthPage = () => {
     setErrors(validateLogin(form));
   };
 
+  const handleAccessModeSelect = (mode) => {
+    setSelectedRole(mode.key);
+    setForm(getModeCredentials(mode));
+    setTouched({});
+    setErrors({});
+    setAuthError('');
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     const nextErrors = validateLogin(form);
@@ -109,34 +138,56 @@ export const AuthPage = () => {
               Local sign-in uses email and password, Google onboarding is student-only, and the backend decides the account role and status for every session.
             </p>
           </div>
+          <ThemePanel theme={theme} onChange={setTheme} />
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <section className="space-y-6">
             <div>
               <div className="eyebrow mb-4">Access policy</div>
-              <h2 className="section-title">Roles are visible, but no longer chosen during sign-in.</h2>
+              <h2 className="section-title">Roles stay backend-controlled, but demo access can fill instantly.</h2>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-                This keeps role assignment database-driven, avoids unsafe client-side role switching, and enforces one sign-in method per student account instead of same-email auto-linking.
+                Click any role card to auto-fill that seeded demo account. The backend still decides the real role and permissions after sign-in.
               </p>
             </div>
 
             <div className="grid gap-4">
               {accessModes.map((mode) => {
                 const Icon = mode.icon;
+                const selected = selectedRole === mode.key;
                 return (
-                  <div key={mode.title} className="premium-card bg-white/65 p-6 dark:bg-white/5">
+                  <button
+                    key={mode.title}
+                    type="button"
+                    onClick={() => handleAccessModeSelect(mode)}
+                    className={cn(
+                      'premium-card w-full bg-white/65 p-6 text-left transition-all duration-200 dark:bg-white/5',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35',
+                      selected
+                        ? 'border-primary bg-primary/8 shadow-[0_20px_40px_rgba(15,118,110,0.12)]'
+                        : 'hover:border-primary/35 hover:bg-primary/5'
+                    )}
+                  >
                     <div className="flex items-start gap-4">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <div className={cn(
+                        'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-primary',
+                        selected ? 'bg-primary text-white' : 'bg-primary/10'
+                      )}>
                         <Icon size={22} />
                       </div>
-                      <div>
-                        <Badge variant="info">{mode.badge}</Badge>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Badge variant="info">{mode.badge}</Badge>
+                          {selected && <Badge>Autofill ready</Badge>}
+                        </div>
                         <h3 className="mt-4 text-xl font-semibold">{mode.title}</h3>
                         <p className="mt-2 text-sm leading-7 text-muted-foreground">{mode.copy}</p>
+                        <p className="mt-4 text-sm font-semibold text-primary">
+                          Click to auto-fill this role in the sign-in form.
+                        </p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -219,8 +270,8 @@ export const AuthPage = () => {
               </Button>
 
               {!googleEnabled && (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Google OAuth is hidden until backend client credentials are configured.
+                <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                  Add <span className="font-semibold text-foreground">GOOGLE_CLIENT_ID</span> and <span className="font-semibold text-foreground">GOOGLE_CLIENT_SECRET</span> to <span className="font-semibold text-foreground">Backend/.env</span>, then restart Spring Boot to enable Google student onboarding.
                 </p>
               )}
 
@@ -244,6 +295,49 @@ export const AuthPage = () => {
           </section>
         </div>
       </div>
+    </div>
+  );
+};
+
+const ThemePanel = ({ theme, onChange }) => {
+  const options = [
+    { value: 'light', label: 'Light', icon: Sun },
+    { value: 'dark', label: 'Dark', icon: Moon },
+    { value: 'system', label: 'System', icon: ShieldCheck },
+  ];
+
+  return (
+    <div className="min-w-full rounded-[28px] border border-border bg-white/70 p-3 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur-sm dark:bg-white/5 md:min-w-[320px]">
+      <p className="px-2 text-[11px] font-bold uppercase tracking-[0.28em] text-muted-foreground">Appearance</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const selected = theme === option.value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={cn(
+                'flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-3xl border px-3 py-4 text-sm font-semibold transition-all duration-200',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35',
+                selected
+                  ? 'border-primary bg-primary text-white shadow-[0_18px_32px_rgba(15,118,110,0.2)]'
+                  : 'border-border bg-background/80 text-foreground hover:border-primary/35 hover:bg-primary/5'
+              )}
+              aria-pressed={selected}
+              aria-label={`Use ${option.label.toLowerCase()} theme`}
+            >
+              <Icon size={18} />
+              <span>{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-3 px-2 text-xs leading-6 text-muted-foreground">
+        Choose the campus workspace mood before signing in.
+      </p>
     </div>
   );
 };

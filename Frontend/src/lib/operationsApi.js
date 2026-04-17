@@ -1,6 +1,6 @@
 import { toBackendRole } from './moduleCApi';
 
-const API_BASE = import.meta.env.VITE_OPERATIONS_API_URL || 'http://127.0.0.1:8081/api';
+const API_BASE = import.meta.env.VITE_OPERATIONS_API_URL || 'http://localhost:8082/api';
 
 const ensureOk = async (response) => {
   if (response.ok) return response;
@@ -74,3 +74,4 @@ export const markAllNotificationsRead = async ({ role, userId } = {}) => {
   if (userId) search.set('userId', userId);
   return jsonRequest(`${API_BASE}/notifications/read-all?${search.toString()}`, { method: 'PATCH' });
 };
+

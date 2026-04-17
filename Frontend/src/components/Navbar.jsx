@@ -1,17 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, LogOut, Menu, Moon, Radar, ShieldCheck, Sun, UserRound, X } from 'lucide-react';
+import { ArrowRight, LogOut, Menu, Radar, UserRound, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
 import { Button, Badge } from './ui/Primitives';
 
-const defaultLinks = [
-  { type: 'route', to: '/', label: 'Home' },
-  { href: '#overview', label: 'Overview' },
-  { href: '#modules', label: 'Modules' },
-  { href: '#access-paths', label: 'Access' },
-];
+const defaultLinks = [];
 
 export const Navbar = ({
   title = 'CampusHub',
@@ -23,7 +17,6 @@ export const Navbar = ({
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
-  const { theme, setTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const fixedShellRef = useRef(null);
   const [fixedSpacerHeight, setFixedSpacerHeight] = useState(112);
@@ -59,7 +52,12 @@ export const Navbar = ({
   );
 
   const brand = (
-    <div className="flex min-w-0 items-center gap-3">
+    <button
+      type="button"
+      onClick={() => navigate('/')}
+      className="flex min-w-0 items-center gap-3 rounded-2xl text-left transition-opacity duration-200 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+      aria-label="Go to home page"
+    >
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white">
         <Radar size={20} />
       </div>
@@ -67,20 +65,11 @@ export const Navbar = ({
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
         <p className="text-sm font-semibold">{subtitle}</p>
       </div>
-    </div>
-  );
-
-  const themeControls = (
-    <ThemeSwitcher
-      theme={theme}
-      onChange={setTheme}
-      className="self-start lg:self-auto"
-    />
+    </button>
   );
 
   const desktopActions = isAuthenticated ? (
     <>
-      {themeControls}
       <div className="glass-panel flex items-center gap-3 px-3 py-2">
         <img src={user?.avatar} alt="Avatar" className="h-10 w-10 rounded-2xl border border-border bg-muted/80" />
         <div className="min-w-0">
@@ -102,7 +91,6 @@ export const Navbar = ({
     </>
   ) : (
     <>
-      {themeControls}
       <Button variant="outline" size="lg" className="gap-2" onClick={() => navigate('/register')}>
         <UserRound size={16} />
         Student Register
@@ -172,7 +160,7 @@ export const Navbar = ({
 
       {mobileMenuOpen && (
         <div className="mt-4 space-y-4 border-t border-border pt-4 lg:hidden">
-          <div className="flex items-center justify-between gap-3">
+          {links.length > 0 && (
             <div className="flex min-w-0 items-center gap-4 overflow-x-auto whitespace-nowrap pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {links.map((item) => (
                 item.type === 'route' ? (
@@ -199,10 +187,7 @@ export const Navbar = ({
                 )
               ))}
             </div>
-            <div className="shrink-0">
-              {themeControls}
-            </div>
-          </div>
+          )}
           {mobileActions}
         </div>
       )}
@@ -254,45 +239,3 @@ export const Navbar = ({
   return navbarContent;
 };
 
-const ThemeSwitcher = ({ theme, onChange, className }) => {
-  const options = [
-    { value: 'light', label: 'Light', icon: Sun },
-    { value: 'dark', label: 'Dark', icon: Moon },
-    { value: 'system', label: 'System', icon: ShieldCheck },
-  ];
-
-  return (
-    <div
-      className={cn(
-        'inline-flex items-center rounded-full border border-border bg-white/75 p-1 shadow-[0_10px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm dark:bg-white/5',
-        className
-      )}
-      aria-label="Theme selection"
-    >
-      {options.map((option) => {
-        const Icon = option.icon;
-        const selected = theme === option.value;
-
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className={cn(
-              'inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition-all duration-200',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35',
-              selected
-                ? 'bg-primary text-white shadow-[0_12px_24px_rgba(15,118,110,0.18)]'
-                : 'text-foreground hover:bg-black/5 dark:hover:bg-white/10'
-            )}
-            aria-pressed={selected}
-            aria-label={`Use ${option.label.toLowerCase()} theme`}
-            title={option.label}
-          >
-            <Icon size={15} />
-          </button>
-        );
-      })}
-    </div>
-  );
-};
