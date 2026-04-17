@@ -1,16 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, MapPin, Pencil, Plus, Search, Trash2, Users, Wrench } from 'lucide-react';
-import { Button, Card, Input } from '../components/ui/Primitives';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, PlusCircle, ShieldCheck } from 'lucide-react';
+import { Card, Badge } from '../components/ui/Primitives';
 import { ResourceFormModal } from '../components/resources/ResourceFormModal';
-import { ResourceStatusBadge } from '../components/resources/ResourceStatusBadge';
+import { AdminResourceFilters, hasActiveResourceFilters } from '../components/resources/AdminResourceFilters';
+import { AdminResourceList } from '../components/resources/AdminResourceList';
+import { ResourceActionDialog } from '../components/resources/ResourceActionDialog';
 import {
-  RESOURCE_STATUSES,
-  RESOURCE_TYPES,
   createResource,
   deleteResource,
-  formatAvailabilityWindow,
-  formatResourceType,
   getResources,
   updateResource,
   updateResourceStatus,
@@ -18,49 +15,86 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 const DEFAULT_FILTER = 'ALL';
+const DEFAULT_FILTERS = {
+  search: '',
+  type: DEFAULT_FILTER,
+  status: DEFAULT_FILTER,
+  location: '',
+  capacity: '',
+};
 
 export const AdminResourcesPage = () => {
   const { user } = useAuth();
-  const [filters, setFilters] = useState({
-    search: '',
-    type: DEFAULT_FILTER,
-    status: DEFAULT_FILTER,
-    location: '',
-  });
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [notice, setNotice] = useState(null);
   const [modalState, setModalState] = useState({ open: false, resource: null });
   const [submitError, setSubmitError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busySubmit, setBusySubmit] = useState(false);
+  const [busyAction, setBusyAction] = useState(null);
+  const [confirmState, setConfirmState] = useState(null);
+  const requestIdRef = useRef(0);
 
-  const loadResources = async () => {
-    try {
+  const loadResources = useCallback(async (nextFilters, { silent = false } = {}) => {
+    const requestId = ++requestIdRef.current;
+
+    if (silent) {
+      setRefreshing(true);
+    } else {
       setLoading(true);
-      setError('');
-      const data = await getResources(filters);
+    }
+
+    try {
+      const data = await getResources(nextFilters);
+      if (requestId !== requestIdRef.current) return;
       setResources(data);
+      setError('');
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err.message || 'Unable to load resource management data.');
     } finally {
+      if (requestId !== requestIdRef.current) return;
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      loadResources();
-    }, 180);
+      loadResources(filters);
+    }, 220);
 
     return () => window.clearTimeout(timeoutId);
-  }, [filters]);
+  }, [filters, loadResources]);
 
-  const summary = useMemo(() => ({
-    total: resources.length,
-    active: resources.filter((resource) => resource.status === 'ACTIVE').length,
-    unavailable: resources.filter((resource) => resource.status === 'OUT_OF_SERVICE').length,
-  }), [resources]);
+  const summary = useMemo(() => {
+    const active = resources.filter((resource) => resource.status === 'ACTIVE').length;
+    const unavailable = resources.filter((resource) => resource.status === 'OUT_OF_SERVICE').length;
+
+    return {
+      total: resources.length,
+      active,
+      unavailable,
+      attention: unavailable,
+    };
+  }, [resources]);
+
+  const activeFilterMode = hasActiveResourceFilters(filters);
+
+  const updateFilter = (field, value) => {
+    setFilters((current) => ({ ...current, [field]: value }));
+  };
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+  };
+
+  const refreshResources = async () => {
+    await loadResources(filters, { silent: true });
+  };
 
   const closeModal = () => {
     setModalState({ open: false, resource: null });
@@ -68,59 +102,98 @@ export const AdminResourcesPage = () => {
   };
 
   const openCreate = () => {
-    setSuccess('');
+    setNotice(null);
+    setSubmitError('');
     setModalState({ open: true, resource: null });
   };
 
   const openEdit = (resource) => {
-    setSuccess('');
+    setNotice(null);
+    setSubmitError('');
     setModalState({ open: true, resource });
   };
 
   const handleSave = async (payload) => {
     try {
-      setBusy(true);
+      setBusySubmit(true);
       setSubmitError('');
+
       if (modalState.resource) {
         await updateResource(modalState.resource.id, payload, user.role);
-        setSuccess('Resource updated successfully.');
+        setNotice({ type: 'success', message: 'Resource updated successfully.' });
       } else {
         await createResource(payload, user.role);
-        setSuccess('Resource created successfully.');
+        setNotice({ type: 'success', message: 'Resource created successfully.' });
       }
+
       closeModal();
-      await loadResources();
+      await loadResources(filters, { silent: true });
     } catch (err) {
       setSubmitError(err.message || 'Unable to save the resource.');
       throw err;
     } finally {
-      setBusy(false);
+      setBusySubmit(false);
     }
   };
 
-  const handleDelete = async (resource) => {
-    if (!window.confirm(`Delete ${resource.name} from the catalogue?`)) return;
-    try {
-      setError('');
-      setSuccess('');
-      await deleteResource(resource.id, user.role);
-      setSuccess('Resource deleted successfully.');
-      await loadResources();
-    } catch (err) {
-      setError(err.message || 'Unable to delete the resource.');
-    }
+  const requestDelete = (resource) => {
+    setConfirmState({
+      type: 'delete',
+      resource,
+      title: `Delete ${resource.name}?`,
+      description: 'This removes the resource from the shared catalogue. Use this only when the asset record should no longer exist.',
+      confirmLabel: 'Delete resource',
+      confirmVariant: 'danger',
+    });
   };
 
-  const handleToggleStatus = async (resource) => {
+  const requestToggleStatus = (resource) => {
     const nextStatus = resource.status === 'ACTIVE' ? 'OUT_OF_SERVICE' : 'ACTIVE';
+    setConfirmState({
+      type: 'status',
+      resource,
+      nextStatus,
+      title: nextStatus === 'OUT_OF_SERVICE' ? `Mark ${resource.name} out of service?` : `Restore ${resource.name}?`,
+      description: nextStatus === 'OUT_OF_SERVICE'
+        ? 'This will make the resource appear unavailable for downstream booking workflows until an admin restores it.'
+        : 'This will return the resource to the active catalogue and make it available for future booking checks.',
+      confirmLabel: nextStatus === 'OUT_OF_SERVICE' ? 'Mark out of service' : 'Restore resource',
+      confirmVariant: nextStatus === 'OUT_OF_SERVICE' ? 'danger' : 'primary',
+    });
+  };
+
+  const closeConfirm = () => {
+    if (busyAction) return;
+    setConfirmState(null);
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmState?.resource) return;
+
     try {
+      setBusyAction({ type: confirmState.type, resourceId: confirmState.resource.id });
       setError('');
-      setSuccess('');
-      await updateResourceStatus(resource.id, nextStatus, user.role);
-      setSuccess(`Resource marked as ${nextStatus.replace('_', ' ')}.`);
-      await loadResources();
+      setNotice(null);
+
+      if (confirmState.type === 'delete') {
+        await deleteResource(confirmState.resource.id, user.role);
+        setNotice({ type: 'success', message: 'Resource deleted successfully.' });
+      } else if (confirmState.type === 'status') {
+        await updateResourceStatus(confirmState.resource.id, confirmState.nextStatus, user.role);
+        setNotice({
+          type: 'success',
+          message: confirmState.nextStatus === 'OUT_OF_SERVICE'
+            ? 'Resource marked out of service.'
+            : 'Resource restored to active service.',
+        });
+      }
+
+      setConfirmState(null);
+      await loadResources(filters, { silent: true });
     } catch (err) {
-      setError(err.message || 'Unable to update resource status.');
+      setError(err.message || 'Unable to complete this resource action.');
+    } finally {
+      setBusyAction(null);
     }
   };
 
@@ -130,101 +203,58 @@ export const AdminResourcesPage = () => {
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <div className="eyebrow mb-4">Module A admin desk</div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Manage campus facilities and assets from one searchable operational catalogue.</h1>
+            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Run the facilities catalogue with cleaner search, safer actions, and booking-ready visibility.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-              This desk keeps core resource data clean for discovery, booking review, and maintenance visibility. Admins can add new resources, update metadata, and mark assets out of service.
+              This admin desk keeps campus resource data reliable for the rest of the system. The workflow below is focused on fast edits, clear operational status, and low-friction catalogue maintenance.
             </p>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <Badge variant="info" className="px-3 py-1.5 text-xs">
+                <ShieldCheck size={12} className="mr-1 inline" />
+                Admin workflow only
+              </Badge>
+              <Badge variant={activeFilterMode ? 'warning' : 'neutral'} className="px-3 py-1.5 text-xs">
+                {activeFilterMode ? 'Filtered operational view' : 'Full catalogue view'}
+              </Badge>
+            </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <DeskMetric label="Catalogue size" value={`${summary.total}`} />
-            <DeskMetric label="Active" value={`${summary.active}`} />
-            <DeskMetric label="Out of service" value={`${summary.unavailable}`} />
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <DeskMetric label="Visible now" value={`${summary.total}`} icon={<PlusCircle size={16} />} />
+            <DeskMetric label="Active" value={`${summary.active}`} icon={<CheckCircle2 size={16} />} variant="success" />
+            <DeskMetric label="Needs attention" value={`${summary.attention}`} icon={<AlertTriangle size={16} />} variant="warning" />
+            <DeskMetric label="Out of service" value={`${summary.unavailable}`} icon={<AlertTriangle size={16} />} variant="danger" />
           </div>
         </div>
       </section>
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid flex-1 gap-3 md:grid-cols-4">
-          <div className="relative md:col-span-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-            <Input className="pl-10" placeholder="Search by name, location, or description" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
-          </div>
-          <select className="flex h-11 w-full rounded-xl border border-border bg-white/45 px-3 py-2 text-sm dark:bg-white/5" value={filters.type} onChange={(event) => setFilters((current) => ({ ...current, type: event.target.value }))}>
-            <option value={DEFAULT_FILTER}>All types</option>
-            {RESOURCE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-          </select>
-          <select className="flex h-11 w-full rounded-xl border border-border bg-white/45 px-3 py-2 text-sm dark:bg-white/5" value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}>
-            <option value={DEFAULT_FILTER}>All statuses</option>
-            {RESOURCE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-          </select>
-        </div>
+      <AdminResourceFilters
+        filters={filters}
+        filteredCount={summary.total}
+        totalCount={summary.total}
+        loading={refreshing}
+        onChange={updateFilter}
+        onCreate={openCreate}
+        onRefresh={refreshResources}
+        onReset={resetFilters}
+      />
 
-        <div className="flex gap-3">
-          <Input placeholder="Filter by location" value={filters.location} onChange={(event) => setFilters((current) => ({ ...current, location: event.target.value }))} />
-          <Button className="gap-2 whitespace-nowrap" onClick={openCreate}>
-            <Plus size={16} /> Add resource
-          </Button>
-        </div>
-      </div>
-
-      {success && <Card className="border-success/20 bg-success/5 p-4 text-sm text-success">{success}</Card>}
-      {error && <Card className="border-danger/20 bg-danger/5 p-4 text-sm text-danger">{error}</Card>}
-
-      {loading ? (
-        <Card className="p-8 text-sm text-muted-foreground">Loading resources...</Card>
-      ) : (
-        <Card className="overflow-hidden p-0 bg-white/70 dark:bg-white/5">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left">
-              <thead className="bg-muted/45">
-                <tr className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-                  <th className="px-5 py-4 font-bold">Resource</th>
-                  <th className="px-5 py-4 font-bold">Location</th>
-                  <th className="px-5 py-4 font-bold">Capacity</th>
-                  <th className="px-5 py-4 font-bold">Availability</th>
-                  <th className="px-5 py-4 font-bold">Status</th>
-                  <th className="px-5 py-4 text-right font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resources.map((resource) => (
-                  <tr key={resource.id} className="border-t border-border/70">
-                    <td className="px-5 py-5">
-                      <div>
-                        <p className="font-semibold">{resource.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{formatResourceType(resource.type)}</p>
-                      </div>
-                    </td>
-                    <td className="px-5 py-5 text-sm text-muted-foreground">
-                      <span className="inline-flex items-center gap-2"><MapPin size={14} /> {resource.location}</span>
-                    </td>
-                    <td className="px-5 py-5 text-sm text-muted-foreground">
-                      <span className="inline-flex items-center gap-2"><Users size={14} /> {resource.capacity}</span>
-                    </td>
-                    <td className="px-5 py-5 text-sm text-muted-foreground">{formatAvailabilityWindow(resource.availabilityWindow)}</td>
-                    <td className="px-5 py-5"><ResourceStatusBadge status={resource.status} /></td>
-                    <td className="px-5 py-5">
-                      <div className="flex justify-end gap-2">
-                        <Link to={`/catalogue/${resource.id}`}><Button variant="ghost" size="icon"><Eye size={16} /></Button></Link>
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(resource)}><Pencil size={16} /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleToggleStatus(resource)}><Wrench size={16} /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(resource)}><Trash2 size={16} /></Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {!resources.length && (
-                  <tr>
-                    <td colSpan="6" className="px-5 py-16 text-center text-sm text-muted-foreground">
-                      No resources match the current filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+      {notice && (
+        <Card className={notice.type === 'success' ? 'border-success/20 bg-success/5 p-4 text-sm text-success' : 'border-warning/20 bg-warning/5 p-4 text-sm text-warning'}>
+          {notice.message}
         </Card>
       )}
+      {error && <Card className="border-danger/20 bg-danger/5 p-4 text-sm text-danger">{error}</Card>}
+
+      <AdminResourceList
+        resources={resources}
+        loading={loading}
+        busyAction={busyAction}
+        onEdit={openEdit}
+        onDelete={requestDelete}
+        onToggleStatus={requestToggleStatus}
+        onResetFilters={resetFilters}
+      />
 
       <ResourceFormModal
         isOpen={modalState.open}
@@ -233,16 +263,41 @@ export const AdminResourcesPage = () => {
         onSubmit={handleSave}
         submitLabel={modalState.resource ? 'Save changes' : 'Create resource'}
         title={modalState.resource ? 'Edit facility or asset' : 'Add facility or asset'}
-        busy={busy}
+        busy={busySubmit}
         error={submitError}
+      />
+
+      <ResourceActionDialog
+        isOpen={!!confirmState}
+        title={confirmState?.title}
+        description={confirmState?.description}
+        confirmLabel={confirmState?.confirmLabel}
+        confirmVariant={confirmState?.confirmVariant}
+        busy={!!busyAction}
+        onClose={closeConfirm}
+        onConfirm={handleConfirm}
       />
     </div>
   );
 };
 
-const DeskMetric = ({ label, value }) => (
-  <Card className="bg-white/65 p-5 text-center dark:bg-white/5">
-    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
+const DeskMetric = ({ label, value, icon, variant = 'neutral' }) => (
+  <Card className="bg-white/65 p-5 dark:bg-white/5">
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
+      <div className={
+        variant === 'success'
+          ? 'text-success'
+          : variant === 'warning'
+            ? 'text-warning'
+            : variant === 'danger'
+              ? 'text-danger'
+              : 'text-secondary-accent'
+      }>
+        {icon}
+      </div>
+    </div>
     <p className="mt-3 text-3xl font-semibold">{value}</p>
   </Card>
 );
+
