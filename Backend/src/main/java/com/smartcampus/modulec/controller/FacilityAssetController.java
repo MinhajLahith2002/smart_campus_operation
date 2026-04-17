@@ -45,7 +45,7 @@ public class FacilityAssetController {
     @ResponseStatus(HttpStatus.CREATED)
     public FacilityAssetResponse createResource(
             @Valid @RequestBody FacilityAssetRequest request,
-            @RequestHeader("X-Actor-Role") UserRole actorRole
+            @RequestHeader(value = "X-Actor-Role", required = false) UserRole actorRole
     ) {
         return facilityAssetService.createResource(request, actorRole);
     }
@@ -54,7 +54,7 @@ public class FacilityAssetController {
     public FacilityAssetResponse updateResource(
             @PathVariable Long resourceId,
             @Valid @RequestBody FacilityAssetRequest request,
-            @RequestHeader("X-Actor-Role") UserRole actorRole
+            @RequestHeader(value = "X-Actor-Role", required = false) UserRole actorRole
     ) {
         return facilityAssetService.updateResource(resourceId, request, actorRole);
     }
@@ -63,7 +63,7 @@ public class FacilityAssetController {
     public FacilityAssetResponse updateStatus(
             @PathVariable Long resourceId,
             @Valid @RequestBody UpdateFacilityAssetStatusRequest request,
-            @RequestHeader("X-Actor-Role") UserRole actorRole
+            @RequestHeader(value = "X-Actor-Role", required = false) UserRole actorRole
     ) {
         return facilityAssetService.updateResourceStatus(resourceId, request, actorRole);
     }
@@ -72,7 +72,7 @@ public class FacilityAssetController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteResource(
             @PathVariable Long resourceId,
-            @RequestHeader("X-Actor-Role") UserRole actorRole
+            @RequestHeader(value = "X-Actor-Role", required = false) UserRole actorRole
     ) {
         facilityAssetService.deleteResource(resourceId, actorRole);
     }

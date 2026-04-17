@@ -13,10 +13,15 @@ import com.smartcampus.modulec.dto.FacilityAssetResponse;
 import com.smartcampus.modulec.dto.UpdateFacilityAssetStatusRequest;
 import com.smartcampus.modulec.repository.FacilityAssetRepository;
 import jakarta.persistence.EntityNotFoundException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -26,6 +31,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class FacilityAssetService {
 
+    private static final List<String> DAY_ORDER = List.of(
+            "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+    );
+    private static final Map<String, String> DAY_LOOKUP = DAY_ORDER.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                    day -> day.toLowerCase(Locale.ROOT),
+                    day -> day
+            ));
+    private static final Set<String> SUPPORTED_IMAGE_SCHEMES = Set.of("http", "https");
+
     private final FacilityAssetRepository facilityAssetRepository;
 
     public FacilityAssetService(FacilityAssetRepository facilityAssetRepository) {
@@ -34,8 +49,11 @@ public class FacilityAssetService {
 
     @Transactional(readOnly = true)
     public List<FacilityAssetResponse> getResources(FacilityAssetQuery query) {
-        Specification<FacilityAsset> specification = Specification.where(byType(query.type()))
-                .and(byStatus(query.status()))
+        ResourceType type = parseResourceType(query.type());
+        ResourceStatus status = parseResourceStatus(query.status());
+
+        Specification<FacilityAsset> specification = Specification.where(byType(type))
+                .and(byStatus(status))
                 .and(byCapacity(query.capacity()))
                 .and(byLocation(query.location()))
                 .and(bySearch(query.search()));
@@ -54,7 +72,7 @@ public class FacilityAssetService {
         ensureAdmin(actorRole);
 
         FacilityAsset resource = new FacilityAsset();
-        apply(resource, request);
+        apply(resource, request, null);
         OffsetDateTime now = OffsetDateTime.now();
         resource.setCreatedAt(now);
         resource.setUpdatedAt(now);
@@ -66,7 +84,7 @@ public class FacilityAssetService {
         ensureAdmin(actorRole);
 
         FacilityAsset resource = findResource(resourceId);
-        apply(resource, request);
+        apply(resource, request, resourceId);
         resource.setUpdatedAt(OffsetDateTime.now());
 
         return map(facilityAssetRepository.save(resource));
@@ -93,22 +111,27 @@ public class FacilityAssetService {
     }
 
     private void ensureAdmin(UserRole actorRole) {
-        if (actorRole != UserRole.ADMIN) {
+        if (actorRole == null || actorRole != UserRole.ADMIN) {
             throw new SecurityException("Only admins can modify facilities and assets.");
         }
     }
 
-    private void apply(FacilityAsset resource, FacilityAssetRequest request) {
-        validateAvailabilityWindow(request.availabilityWindow());
+    private void apply(FacilityAsset resource, FacilityAssetRequest request, Long currentResourceId) {
+        String normalizedName = request.name().trim();
+        String normalizedLocation = request.location().trim();
+        String normalizedImageUrl = normalizeImageUrl(request.imageUrl());
+        AvailabilityWindow availabilityWindow = toAvailabilityWindow(request.availabilityWindow());
 
-        resource.setName(request.name().trim());
+        ensureUniqueResource(normalizedName, normalizedLocation, currentResourceId);
+
+        resource.setName(normalizedName);
         resource.setType(request.type());
         resource.setCapacity(request.capacity());
-        resource.setLocation(request.location().trim());
+        resource.setLocation(normalizedLocation);
         resource.setDescription(blankToNull(request.description()));
-        resource.setImageUrl(blankToNull(request.imageUrl()));
+        resource.setImageUrl(normalizedImageUrl);
         resource.setStatus(request.status());
-        resource.setAvailabilityWindow(toAvailabilityWindow(request.availabilityWindow()));
+        resource.setAvailabilityWindow(availabilityWindow);
     }
 
     private void validateAvailabilityWindow(AvailabilityWindowRequest availabilityWindow) {
@@ -118,8 +141,11 @@ public class FacilityAssetService {
     }
 
     private AvailabilityWindow toAvailabilityWindow(AvailabilityWindowRequest request) {
+        validateAvailabilityWindow(request);
+        List<String> normalizedDays = normalizeDays(request.daysOfWeek());
+
         AvailabilityWindow availabilityWindow = new AvailabilityWindow();
-        availabilityWindow.setDaysOfWeek(String.join(",", request.daysOfWeek()));
+        availabilityWindow.setDaysOfWeek(String.join(",", normalizedDays));
         availabilityWindow.setOpenTime(request.openTime());
         availabilityWindow.setCloseTime(request.closeTime());
         availabilityWindow.setNotes(blankToNull(request.notes()));
@@ -127,9 +153,10 @@ public class FacilityAssetService {
     }
 
     private FacilityAssetResponse map(FacilityAsset resource) {
-        List<String> days = resource.getAvailabilityWindow() == null || resource.getAvailabilityWindow().getDaysOfWeek() == null
+        AvailabilityWindow availabilityWindow = resource.getAvailabilityWindow();
+        List<String> days = availabilityWindow == null || availabilityWindow.getDaysOfWeek() == null
                 ? List.of()
-                : Arrays.stream(resource.getAvailabilityWindow().getDaysOfWeek().split(","))
+                : Arrays.stream(availabilityWindow.getDaysOfWeek().split(","))
                         .map(String::trim)
                         .filter(value -> !value.isBlank())
                         .toList();
@@ -144,12 +171,12 @@ public class FacilityAssetService {
                 resource.getImageUrl(),
                 new AvailabilityWindowResponse(
                         days,
-                        resource.getAvailabilityWindow().getOpenTime(),
-                        resource.getAvailabilityWindow().getCloseTime(),
-                        resource.getAvailabilityWindow().getNotes()
+                        availabilityWindow == null ? null : availabilityWindow.getOpenTime(),
+                        availabilityWindow == null ? null : availabilityWindow.getCloseTime(),
+                        availabilityWindow == null ? null : availabilityWindow.getNotes()
                 ),
                 resource.getStatus(),
-                resource.getStatus() == ResourceStatus.ACTIVE,
+                resource.getStatus() == ResourceStatus.ACTIVE && !days.isEmpty() && availabilityWindow != null,
                 resource.getCreatedAt(),
                 resource.getUpdatedAt()
         );
@@ -159,18 +186,80 @@ public class FacilityAssetService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private Specification<FacilityAsset> byType(String type) {
+    private ResourceType parseResourceType(String type) {
         if (type == null || type.isBlank()) {
             return null;
         }
-        return (root, query, builder) -> builder.equal(root.get("type"), ResourceType.valueOf(type.trim().toUpperCase(Locale.ROOT)));
+        try {
+            return ResourceType.valueOf(type.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("Unsupported resource type. Use one of: LAB, HALL, MEETING_ROOM, EQUIPMENT.");
+        }
     }
 
-    private Specification<FacilityAsset> byStatus(String status) {
+    private ResourceStatus parseResourceStatus(String status) {
         if (status == null || status.isBlank()) {
             return null;
         }
-        return (root, query, builder) -> builder.equal(root.get("status"), ResourceStatus.valueOf(status.trim().toUpperCase(Locale.ROOT)));
+        try {
+            return ResourceStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("Unsupported resource status. Use one of: ACTIVE, OUT_OF_SERVICE.");
+        }
+    }
+
+    private void ensureUniqueResource(String name, String location, Long currentResourceId) {
+        facilityAssetRepository.findByNameIgnoreCaseAndLocationIgnoreCase(name, location)
+                .filter(existing -> currentResourceId == null || !existing.getId().equals(currentResourceId))
+                .ifPresent(existing -> {
+                    throw new IllegalArgumentException("A resource with the same name already exists at this location.");
+                });
+    }
+
+    private List<String> normalizeDays(List<String> daysOfWeek) {
+        LinkedHashSet<String> normalizedDays = new LinkedHashSet<>();
+        for (String day : daysOfWeek) {
+            String normalized = DAY_LOOKUP.get(day.trim().toLowerCase(Locale.ROOT));
+            if (normalized == null) {
+                throw new IllegalArgumentException("Availability days must be valid weekday names.");
+            }
+            normalizedDays.add(normalized);
+        }
+
+        return DAY_ORDER.stream()
+                .filter(normalizedDays::contains)
+                .toList();
+    }
+
+    private String normalizeImageUrl(String imageUrl) {
+        String normalized = blankToNull(imageUrl);
+        if (normalized == null) {
+            return null;
+        }
+
+        try {
+            URI uri = new URI(normalized);
+            if (!uri.isAbsolute() || !SUPPORTED_IMAGE_SCHEMES.contains(uri.getScheme().toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("Image URL must be an absolute HTTP or HTTPS URL.");
+            }
+            return normalized;
+        } catch (URISyntaxException exception) {
+            throw new IllegalArgumentException("Image URL must be an absolute HTTP or HTTPS URL.");
+        }
+    }
+
+    private Specification<FacilityAsset> byType(ResourceType type) {
+        if (type == null) {
+            return null;
+        }
+        return (root, query, builder) -> builder.equal(root.get("type"), type);
+    }
+
+    private Specification<FacilityAsset> byStatus(ResourceStatus status) {
+        if (status == null) {
+            return null;
+        }
+        return (root, query, builder) -> builder.equal(root.get("status"), status);
     }
 
     private Specification<FacilityAsset> byCapacity(Integer capacity) {
