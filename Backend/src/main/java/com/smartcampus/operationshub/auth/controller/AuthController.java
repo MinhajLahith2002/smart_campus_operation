@@ -16,7 +16,7 @@ import com.smartcampus.operationshub.auth.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
@@ -34,19 +34,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final Environment environment;
 
-    @Value("${spring.security.oauth2.client.registration.google.client-id:}")
-    private String googleClientId;
-
-    @Value("${spring.security.oauth2.client.registration.google.client-secret:}")
-    private String googleClientSecret;
-
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, Environment environment) {
         this.authService = authService;
+        this.environment = environment;
     }
 
     @GetMapping("/config")
     public AuthConfigResponse getConfig() {
+        String googleClientId = firstProperty(
+                "SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID",
+                "GOOGLE_CLIENT_ID",
+                "spring.security.oauth2.client.registration.google.client-id"
+        );
+        String googleClientSecret = firstProperty(
+                "SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET",
+                "GOOGLE_CLIENT_SECRET",
+                "spring.security.oauth2.client.registration.google.client-secret"
+        );
         return new AuthConfigResponse(StringUtils.hasText(googleClientId) && StringUtils.hasText(googleClientSecret));
     }
 
@@ -109,5 +115,14 @@ public class AuthController {
                                      HttpServletResponse httpResponse) {
         return authService.acceptTechnicianInvite(request, httpRequest, httpResponse);
     }
-}
 
+    private String firstProperty(String... keys) {
+        for (String key : keys) {
+            String value = environment.getProperty(key);
+            if (StringUtils.hasText(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+}

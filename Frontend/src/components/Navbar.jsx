@@ -1,7 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, LogOut, Menu, Radar, UserRound, X } from 'lucide-react';
+import { ArrowRight, LogOut, Menu, Moon, Radar, ShieldCheck, Sun, UserRound, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
 import { Button, Badge } from './ui/Primitives';
 
@@ -13,10 +14,12 @@ export const Navbar = ({
   links = defaultLinks,
   fixed = false,
   className,
+  showThemeSwitcher = false,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const fixedShellRef = useRef(null);
   const [fixedSpacerHeight, setFixedSpacerHeight] = useState(112);
@@ -43,7 +46,7 @@ export const Navbar = ({
 
     window.addEventListener('resize', updateHeight);
     return () => window.removeEventListener('resize', updateHeight);
-  }, [fixed, mobileMenuOpen, isAuthenticated, location.pathname, location.hash]);
+  }, [fixed, mobileMenuOpen, isAuthenticated, location.pathname, location.hash, showThemeSwitcher]);
 
   const getLinkClasses = () => cn(
     'relative px-2 py-2 text-sm font-medium text-muted-foreground transition-colors duration-200',
@@ -68,12 +71,16 @@ export const Navbar = ({
     </button>
   );
 
+  const themeSwitcher = showThemeSwitcher ? (
+    <ThemeSwitcher theme={theme} onChange={setTheme} />
+  ) : null;
+
   const desktopActions = isAuthenticated ? (
     <>
       <div className="glass-panel flex items-center gap-3 px-3 py-2">
         <img src={user?.avatar} alt="Avatar" className="h-10 w-10 rounded-2xl border border-border bg-muted/80" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{user?.name}</p>
+          <p className="truncate text-sm font-semibold">{user?.name || user?.email?.split('@')?.[0] || 'Campus User'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant="info">{user?.role}</Badge>
             <span className="text-xs text-muted-foreground">{user?.email}</span>
@@ -91,6 +98,7 @@ export const Navbar = ({
     </>
   ) : (
     <>
+      {themeSwitcher}
       <Button variant="outline" size="lg" className="gap-2" onClick={() => navigate('/register')}>
         <UserRound size={16} />
         Student Register
@@ -107,7 +115,7 @@ export const Navbar = ({
       <div className="glass-panel flex items-center gap-3 px-3 py-2">
         <img src={user?.avatar} alt="Avatar" className="h-10 w-10 rounded-2xl border border-border bg-muted/80" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{user?.name}</p>
+          <p className="truncate text-sm font-semibold">{user?.name || user?.email?.split('@')?.[0] || 'Campus User'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant="info">{user?.role}</Badge>
             <span className="text-xs text-muted-foreground">{user?.email}</span>
@@ -127,6 +135,7 @@ export const Navbar = ({
     </>
   ) : (
     <>
+      {themeSwitcher && <div className="pb-1">{themeSwitcher}</div>}
       <div className="flex flex-col gap-3 sm:flex-row">
         <Button variant="outline" className="gap-2 sm:flex-1" onClick={() => navigate('/register')}>
           <UserRound size={16} />
@@ -238,4 +247,42 @@ export const Navbar = ({
 
   return navbarContent;
 };
+
+const ThemeSwitcher = ({ theme, onChange }) => {
+  const options = [
+    { value: 'light', label: 'Light', icon: Sun },
+    { value: 'dark', label: 'Dark', icon: Moon },
+    { value: 'system', label: 'System', icon: ShieldCheck },
+  ];
+
+  return (
+    <div className="inline-flex items-center rounded-full border border-border bg-white/75 p-1 shadow-[0_10px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm dark:bg-white/5">
+      {options.map((option) => {
+        const Icon = option.icon;
+        const selected = theme === option.value;
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={cn(
+              'inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition-all duration-200',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35',
+              selected
+                ? 'bg-primary text-white shadow-[0_12px_24px_rgba(15,118,110,0.18)]'
+                : 'text-foreground hover:bg-black/5 dark:hover:bg-white/10'
+            )}
+            aria-pressed={selected}
+            aria-label={`Use ${option.label.toLowerCase()} theme`}
+            title={option.label}
+          >
+            <Icon size={15} />
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 

@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { CalendarClock, CheckCircle2, CircleOff, History, Layers3, MapPin, Users, X } from 'lucide-react';
+import { CalendarClock, CheckCircle2, CircleOff, History, MapPin, Users, X } from 'lucide-react';
 import { Card, Badge, Button, Input } from '../components/ui/Primitives';
-import { approveBooking, getBookingSummary, getBookings, rejectBooking, cancelBooking } from '../lib/operationsApi';
+import { approveBooking, cancelBooking, getBooking, getBookingSummary, getBookings, rejectBooking } from '../lib/operationsApi';
 import { useAuth } from '../context/AuthContext';
 import { toBackendRole } from '../lib/moduleCApi';
 import { cn } from '../lib/utils';
+
+const statusTabs = ['ALL', 'PENDING', 'APPROVED', 'CANCELLATIONS', 'REJECTED', 'CANCELLED'];
 
 export const AdminBookingsPage = () => {
   const { user } = useAuth();
@@ -14,6 +16,7 @@ export const AdminBookingsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyBookingId, setBusyBookingId] = useState(null);
+  const [auditLoadingId, setAuditLoadingId] = useState(null);
   const [rejectionDrafts, setRejectionDrafts] = useState({});
   const [filterMode, setFilterMode] = useState('ALL');
   const [auditBooking, setAuditBooking] = useState(null);
@@ -39,13 +42,40 @@ export const AdminBookingsPage = () => {
     loadData();
   }, []);
 
-  const pendingBookings = useMemo(() => bookings.filter((item) => item.status === 'PENDING'), [bookings]);
-  const cancellationRequests = useMemo(() => bookings.filter((item) => item.cancellationRequestedAt || item.cancellationRequestNote), [bookings]);
+  const cancellationRequests = useMemo(
+    () => bookings.filter((item) => (item.cancellationRequestedAt || item.cancellationRequestNote) && item.status !== 'CANCELLED'),
+    [bookings],
+  );
 
-  const filteredBookings = useMemo(() => {
-    if (filterMode === 'CANCELLATIONS') return cancellationRequests;
-    return bookings;
-  }, [bookings, cancellationRequests, filterMode]);
+  const groupedBookings = useMemo(() => {
+    const pending = bookings.filter((item) => item.status === 'PENDING' && !item.cancellationRequestedAt && !item.cancellationRequestNote);
+    const approved = bookings.filter((item) => item.status === 'APPROVED' && !item.cancellationRequestedAt && !item.cancellationRequestNote);
+    const rejected = bookings.filter((item) => item.status === 'REJECTED');
+    const cancelled = bookings.filter((item) => item.status === 'CANCELLED');
+
+    return {
+      active: [...pending, ...approved],
+      pending,
+      approved,
+      cancellations: cancellationRequests,
+      rejected,
+      cancelled,
+    };
+  }, [bookings, cancellationRequests]);
+
+  const visibleGroups = useMemo(() => {
+    if (filterMode === 'PENDING') return { active: groupedBookings.pending, cancellations: [], rejected: [], cancelled: [] };
+    if (filterMode === 'APPROVED') return { active: groupedBookings.approved, cancellations: [], rejected: [], cancelled: [] };
+    if (filterMode === 'CANCELLATIONS') return { active: [], cancellations: groupedBookings.cancellations, rejected: [], cancelled: [] };
+    if (filterMode === 'REJECTED') return { active: [], cancellations: [], rejected: groupedBookings.rejected, cancelled: [] };
+    if (filterMode === 'CANCELLED') return { active: [], cancellations: [], rejected: [], cancelled: groupedBookings.cancelled };
+    return {
+      active: groupedBookings.active,
+      cancellations: groupedBookings.cancellations,
+      rejected: groupedBookings.rejected,
+      cancelled: groupedBookings.cancelled,
+    };
+  }, [filterMode, groupedBookings]);
 
   const adminActor = {
     actorId: user?.id,
@@ -91,184 +121,323 @@ export const AdminBookingsPage = () => {
     }
   };
 
+  const handleOpenAuditTrail = async (bookingId) => {
+    try {
+      setAuditLoadingId(bookingId);
+      const detail = await getBooking(bookingId);
+      setAuditBooking(detail);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to load the booking audit trail.');
+    } finally {
+      setAuditLoadingId(null);
+    }
+  };
+
+  const metrics = {
+    pending: summary?.pending ?? groupedBookings.pending.length,
+    cancellationRequests: summary?.cancellationRequests ?? groupedBookings.cancellations.length,
+    approved: summary?.approved ?? groupedBookings.approved.length,
+    rejected: summary?.rejected ?? groupedBookings.rejected.length,
+    cancelled: groupedBookings.cancelled.length,
+  };
+
+  const visibleCount = visibleGroups.active.length + visibleGroups.cancellations.length + visibleGroups.rejected.length + visibleGroups.cancelled.length;
+
   return (
     <div className="space-y-8">
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <div className="eyebrow mb-4">Booking desk admin view</div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Booking Desk gives operations staff a clear approval queue and conflict-aware review surface.</h1>
+            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Keep the approval desk focused on live booking work, while cancelled and rejected outcomes stay in their own review areas.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-              The handover calls out booking management, optimized booking rules, and double-booking handling. This page now runs against the live backend approval workflow.
+              Pending approvals, approved bookings, cancellation requests, rejected requests, and cancelled records are now separated so the admin does not review mixed statuses in one queue.
             </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-1 xl:grid-cols-4">
-            <DeskMetric label="Pending review" value={`${summary?.pending ?? pendingBookings.length}`} />
-            <DeskMetric label="Cancel Requests" value={`${summary?.cancellationRequests ?? cancellationRequests.length}`} variant="danger" />
-            <DeskMetric label="Approved today" value={`${summary?.approved ?? 0}`} />
-            <DeskMetric label="Rejected" value={`${summary?.rejected ?? 0}`} />
+          <div className="grid gap-4 sm:grid-cols-5 lg:grid-cols-1 xl:grid-cols-5">
+            <DeskMetric label="Pending review" value={`${metrics.pending}`} />
+            <DeskMetric label="Cancel requests" value={`${metrics.cancellationRequests}`} variant="danger" />
+            <DeskMetric label="Approved" value={`${metrics.approved}`} />
+            <DeskMetric label="Rejected" value={`${metrics.rejected}`} />
+            <DeskMetric label="Cancelled" value={`${metrics.cancelled}`} />
           </div>
         </div>
       </section>
 
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+        {statusTabs.map((status) => (
+          <button
+            key={status}
+            onClick={() => setFilterMode(status)}
+            className={cn(
+              'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-all',
+              filterMode === status
+                ? 'bg-primary text-white border-primary shadow-md'
+                : 'bg-card text-muted-foreground border-border hover:border-primary/50'
+            )}
+          >
+            {status === 'ALL' ? 'All' : status === 'CANCELLATIONS' ? 'Cancellation Requests' : status.replace('_', ' ')}
+          </button>
+        ))}
+      </div>
+
       {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
-      {loading && <Card className="p-6 text-sm text-muted-foreground">Loading approval queue...</Card>}
+      {loading && <Card className="p-6 text-sm text-muted-foreground">Loading booking desk...</Card>}
 
       {!loading && (
-        <section className="space-y-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-xl font-semibold">Approval queue</h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setFilterMode('ALL')}
-                className={cn(
-                  'rounded-full px-4 py-1.5 text-xs font-semibold transition-all',
-                  filterMode === 'ALL' ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                )}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFilterMode('CANCELLATIONS')}
-                className={cn(
-                  'flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold transition-all',
-                  filterMode === 'CANCELLATIONS' ? 'bg-danger text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                )}
-              >
-                Cancellation Requests
-                <Badge variant={cancellationRequests.length > 0 ? 'danger' : 'neutral'} className="h-5 min-w-5 px-1 bg-white/20">{cancellationRequests.length}</Badge>
-              </button>
+        <div className="space-y-8">
+          {(filterMode === 'ALL' || filterMode === 'PENDING' || filterMode === 'APPROVED') && (
+            <BookingSection
+              title="Live booking queue"
+              badge={`Active (${visibleGroups.active.length})`}
+              copy="Only pending and approved bookings remain here, so the main desk stays focused on live operational work."
+              bookings={visibleGroups.active}
+              emptyCopy="No active bookings found for this filter."
+              renderBookingCard={(booking) => (
+                <BookingCard
+                  booking={booking}
+                  busyBookingId={busyBookingId}
+                  auditLoadingId={auditLoadingId}
+                  rejectionDrafts={rejectionDrafts}
+                  setRejectionDrafts={setRejectionDrafts}
+                  handleApprove={handleApprove}
+                  handleReject={handleReject}
+                  handleConfirmCancel={handleConfirmCancel}
+                  handleOpenAuditTrail={handleOpenAuditTrail}
+                />
+              )}
+            />
+          )}
+
+          {(filterMode === 'ALL' || filterMode === 'CANCELLATIONS') && (
+            <BookingSection
+              title="Cancellation requests"
+              badge={`Requests (${visibleGroups.cancellations.length})`}
+              copy="User cancellation requests are isolated here for fast decision-making without cluttering the live approval desk."
+              bookings={visibleGroups.cancellations}
+              emptyCopy="No cancellation requests found."
+              renderBookingCard={(booking) => (
+                <BookingCard
+                  booking={booking}
+                  busyBookingId={busyBookingId}
+                  auditLoadingId={auditLoadingId}
+                  rejectionDrafts={rejectionDrafts}
+                  setRejectionDrafts={setRejectionDrafts}
+                  handleApprove={handleApprove}
+                  handleReject={handleReject}
+                  handleConfirmCancel={handleConfirmCancel}
+                  handleOpenAuditTrail={handleOpenAuditTrail}
+                />
+              )}
+            />
+          )}
+
+          {(filterMode === 'ALL' || filterMode === 'REJECTED') && (
+            <BookingSection
+              title="Rejected requests"
+              badge={`Rejected (${visibleGroups.rejected.length})`}
+              copy="Rejected requests stay archived here instead of mixing with the live booking workflow."
+              bookings={visibleGroups.rejected}
+              emptyCopy="No rejected bookings found."
+              renderBookingCard={(booking) => (
+                <BookingCard
+                  booking={booking}
+                  busyBookingId={busyBookingId}
+                  auditLoadingId={auditLoadingId}
+                  rejectionDrafts={rejectionDrafts}
+                  setRejectionDrafts={setRejectionDrafts}
+                  handleApprove={handleApprove}
+                  handleReject={handleReject}
+                  handleConfirmCancel={handleConfirmCancel}
+                  handleOpenAuditTrail={handleOpenAuditTrail}
+                />
+              )}
+            />
+          )}
+
+          {(filterMode === 'ALL' || filterMode === 'CANCELLED') && (
+            <BookingSection
+              title="Cancelled bookings"
+              badge={`Cancelled (${visibleGroups.cancelled.length})`}
+              copy="Confirmed cancellations are stored separately so the admin can review outcomes without crowding the active desk."
+              bookings={visibleGroups.cancelled}
+              emptyCopy="No cancelled bookings found."
+              renderBookingCard={(booking) => (
+                <BookingCard
+                  booking={booking}
+                  busyBookingId={busyBookingId}
+                  auditLoadingId={auditLoadingId}
+                  rejectionDrafts={rejectionDrafts}
+                  setRejectionDrafts={setRejectionDrafts}
+                  handleApprove={handleApprove}
+                  handleReject={handleReject}
+                  handleConfirmCancel={handleConfirmCancel}
+                  handleOpenAuditTrail={handleOpenAuditTrail}
+                />
+              )}
+            />
+          )}
+
+          {visibleCount === 0 && filterMode !== 'ALL' && (
+            <div className="rounded-2xl border border-dashed border-border bg-card py-20 text-center">
+              <p className="text-muted-foreground">No bookings found for this filter.</p>
             </div>
-          </div>
-
-          <div className="space-y-3">
-            {filteredBookings.map((booking) => {
-              const isPending = booking.status === 'PENDING';
-              const isCancellationRequested = !!booking.cancellationRequestedAt || !!booking.cancellationRequestNote;
-
-              return (
-                <Card 
-                  key={booking.id} 
-                  className={cn(
-                    "bg-white/70 p-6 dark:bg-white/5 transition-all",
-                    isCancellationRequested && booking.status !== 'CANCELLED' ? "border-danger/30 ring-1 ring-danger/20 shadow-lg shadow-danger/5" : "border-border/60"
-                  )}
-                >
-                  {isCancellationRequested && booking.status !== 'CANCELLED' && (
-                    <div className="mb-4 flex items-center gap-2 rounded-xl bg-danger/10 px-4 py-2 text-sm font-semibold text-danger">
-                      <div className="h-2 w-2 animate-pulse rounded-full bg-danger" />
-                      Pending Cancellation Request
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={booking.status === 'APPROVED' ? 'success' : booking.status === 'REJECTED' ? 'danger' : 'warning'}>
-                          {booking.status}
-                        </Badge>
-                        <Badge variant="info">#{booking.id}</Badge>
-                      </div>
-                      <h3 className="text-xl font-semibold">{booking.resourceName}</h3>
-                      <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                        <p className="flex items-center gap-2"><CalendarClock size={14} /> {format(new Date(booking.bookingDate), 'MMM d, yyyy')} Â· {booking.startTime.slice(0, 5)} - {booking.endTime.slice(0, 5)}</p>
-                        <p className="flex items-center gap-2"><Users size={14} /> {booking.attendees} attendees</p>
-                        <p className="flex items-center gap-2"><MapPin size={14} /> {booking.resourceLocation}</p>
-                        <p className="flex items-center gap-2"><Layers3 size={14} /> {booking.purpose}</p>
-                      </div>
-
-                      {isCancellationRequested && booking.status !== 'CANCELLED' && (
-                        <div className="mt-4 rounded-2xl border border-danger/20 bg-danger/5 px-4 py-4 dark:bg-danger/10">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-danger/80">User Cancellation Reason</p>
-                          <p className="mt-2 text-sm leading-6 text-foreground font-medium italic underline underline-offset-4 decoration-danger/20">
-                            "{booking.cancellationRequestNote || 'No reason provided.'}"
-                          </p>
-                        </div>
-                      )}
-
-                      {booking.rejectionReason && (
-                        <div className="rounded-2xl border border-danger/15 bg-danger/6 px-4 py-3 text-sm text-danger">
-                          <span className="font-semibold">Conflict note:</span> {booking.rejectionReason}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col gap-3 xl:min-w-64">
-                      {isCancellationRequested && booking.status !== 'CANCELLED' ? (
-                        <Button 
-                          className="gap-2 bg-danger hover:bg-danger/90 text-white border-transparent" 
-                          isLoading={busyBookingId === booking.id} 
-                          onClick={() => handleConfirmCancel(booking.id)}
-                        >
-                          <CircleOff size={16} /> Confirm Cancellation
-                        </Button>
-                      ) : null}
-                      
-                      {isPending && !isCancellationRequested ? (
-                        <>
-                          <Button className="gap-2" isLoading={busyBookingId === booking.id} onClick={() => handleApprove(booking.id)}><CheckCircle2 size={16} /> Approve request</Button>
-                          <Input
-                            placeholder="Rejection reason if declining"
-                            value={rejectionDrafts[booking.id] || ''}
-                            onChange={(event) => setRejectionDrafts((current) => ({ ...current, [booking.id]: event.target.value }))}
-                          />
-                          <Button variant="outline" className="gap-2 text-danger border-danger/20 hover:bg-danger/10" isLoading={busyBookingId === booking.id} onClick={() => handleReject(booking.id)}><CircleOff size={16} /> Reject request</Button>
-                        </>
-                      ) : null}
-                      
-                      {!isPending && !isCancellationRequested ? (
-                        <Button variant="ghost" className="gap-2" onClick={() => setAuditBooking(booking)}>
-                          <History size={16} /> View audit trail
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        </section>
+          )}
+        </div>
       )}
 
-      {auditBooking && (
-        <AuditTrailModal 
-          booking={auditBooking} 
-          onClose={() => setAuditBooking(null)} 
-        />
-      )}
+      {auditBooking && <AuditTrailModal booking={auditBooking} onClose={() => setAuditBooking(null)} />}
     </div>
   );
 };
 
+const BookingCard = ({
+  booking,
+  busyBookingId,
+  auditLoadingId,
+  rejectionDrafts,
+  setRejectionDrafts,
+  handleApprove,
+  handleReject,
+  handleConfirmCancel,
+  handleOpenAuditTrail,
+}) => {
+  const isPending = booking.status === 'PENDING';
+  const isApproved = booking.status === 'APPROVED';
+  const isRejected = booking.status === 'REJECTED';
+  const isCancelled = booking.status === 'CANCELLED';
+  const isCancellationRequested = (!!booking.cancellationRequestedAt || !!booking.cancellationRequestNote) && !isCancelled;
+
+  return (
+    <Card
+      key={booking.id}
+      className={cn(
+        'bg-white/70 p-6 dark:bg-white/5 transition-all border-border/60',
+        isCancellationRequested && 'border-danger/30 ring-1 ring-danger/20 shadow-lg shadow-danger/5'
+      )}
+    >
+      {isCancellationRequested && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl bg-danger/10 px-4 py-2 text-sm font-semibold text-danger">
+          <div className="h-2 w-2 animate-pulse rounded-full bg-danger" />
+          Pending Cancellation Request
+        </div>
+      )}
+
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={isApproved ? 'success' : isRejected ? 'danger' : isCancelled ? 'neutral' : 'warning'}>
+              {booking.status}
+            </Badge>
+            <Badge variant="info">#{booking.id}</Badge>
+          </div>
+          <h3 className="text-xl font-semibold">{booking.resourceName}</h3>
+          <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+            <p className="flex items-center gap-2"><CalendarClock size={14} /> {format(new Date(booking.bookingDate), 'MMM d, yyyy')} · {booking.startTime.slice(0, 5)} - {booking.endTime.slice(0, 5)}</p>
+            <p className="flex items-center gap-2"><Users size={14} /> {booking.attendees} attendees</p>
+            <p className="flex items-center gap-2"><MapPin size={14} /> {booking.resourceLocation}</p>
+          </div>
+
+          {isCancellationRequested && (
+            <div className="mt-4 rounded-2xl border border-danger/20 bg-danger/5 px-4 py-4 dark:bg-danger/10">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-danger/80">User Cancellation Reason</p>
+              <p className="mt-2 text-sm leading-6 text-foreground font-medium italic">"{booking.cancellationRequestNote || 'No reason provided.'}"</p>
+            </div>
+          )}
+
+          {booking.rejectionReason && (
+            <div className="rounded-2xl border border-danger/15 bg-danger/6 px-4 py-3 text-sm text-danger">
+              <span className="font-semibold">Conflict note:</span> {booking.rejectionReason}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 xl:min-w-64">
+          {isCancellationRequested ? (
+            <Button
+              className="gap-2 bg-danger hover:bg-danger/90 text-white border-transparent"
+              isLoading={busyBookingId === booking.id}
+              onClick={() => handleConfirmCancel(booking.id)}
+            >
+              <CircleOff size={16} /> Confirm Cancellation
+            </Button>
+          ) : null}
+
+          {isPending && !isCancellationRequested ? (
+            <>
+              <Button className="gap-2" isLoading={busyBookingId === booking.id} onClick={() => handleApprove(booking.id)}><CheckCircle2 size={16} /> Approve Request</Button>
+              <Input
+                placeholder="Rejection reason if declining"
+                value={rejectionDrafts[booking.id] || ''}
+                onChange={(event) => setRejectionDrafts((current) => ({ ...current, [booking.id]: event.target.value }))}
+              />
+              <Button variant="outline" className="gap-2 text-danger border-danger/20 hover:bg-danger/10" isLoading={busyBookingId === booking.id} onClick={() => handleReject(booking.id)}><CircleOff size={16} /> Reject Request</Button>
+            </>
+          ) : null}
+
+          {!isPending || isCancellationRequested ? (
+            <Button variant="ghost" className="gap-2" isLoading={auditLoadingId === booking.id} onClick={() => handleOpenAuditTrail(booking.id)}>
+              {auditLoadingId !== booking.id && <History size={16} />} View Audit Trail
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+const BookingSection = ({ title, badge, copy, bookings, emptyCopy, renderBookingCard }) => (
+  <section className="space-y-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{copy}</p>
+      </div>
+      <Badge variant="info">{badge}</Badge>
+    </div>
+
+    <div className="space-y-4">
+      {bookings.map(renderBookingCard)}
+      {bookings.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-border bg-card py-16 text-center">
+          <p className="text-muted-foreground">{emptyCopy}</p>
+        </div>
+      )}
+    </div>
+  </section>
+);
+
 const DeskMetric = ({ label, value, variant }) => (
   <Card className="bg-white/65 p-5 text-center dark:bg-white/5">
     <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
-    <p className={cn("mt-3 text-3xl font-semibold", variant === 'danger' && "text-danger")}>{value}</p>
+    <p className={cn('mt-3 text-3xl font-semibold', variant === 'danger' && 'text-danger')}>{value}</p>
   </Card>
 );
 
 const AuditTrailModal = ({ booking, onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-300">
-    <Card className="relative w-full max-w-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xl animate-in zoom-in-95 duration-200">
+  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onClick={onClose}>
+    <Card className="relative w-full max-w-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xl" onClick={(event) => event.stopPropagation()}>
       <div className="flex items-center justify-between border-b border-border p-6">
         <div>
           <h3 className="text-xl font-semibold">Booking Audit Trail</h3>
           <p className="mt-1 text-sm text-muted-foreground">Historical activity for #{booking.id} - {booking.resourceName}</p>
         </div>
-        <button onClick={onClose} className="rounded-full p-2 hover:bg-muted transition-colors">
+        <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-muted transition-colors">
           <X size={20} />
         </button>
       </div>
-      
+
       <div className="max-h-[60vh] overflow-y-auto p-6">
         <div className="relative space-y-8 before:absolute before:left-3.5 before:top-2 before:h-[calc(100%-16px)] before:w-0.5 before:bg-border">
           {booking.activities?.length > 0 ? (
             booking.activities.map((activity, index) => (
               <div key={activity.id} className="relative pl-10">
                 <div className={cn(
-                  "absolute left-0 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white dark:bg-slate-900",
-                  index === 0 ? "border-primary ring-4 ring-primary/10" : "border-border"
+                  'absolute left-0 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white dark:bg-slate-900',
+                  index === 0 ? 'border-primary ring-4 ring-primary/10' : 'border-border'
                 )}>
-                  <div className={cn("h-2 w-2 rounded-full", index === 0 ? "bg-primary" : "bg-muted-foreground/40")} />
+                  <div className={cn('h-2 w-2 rounded-full', index === 0 ? 'bg-primary' : 'bg-muted-foreground/40')} />
                 </div>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
@@ -278,8 +447,8 @@ const AuditTrailModal = ({ booking, onClose }) => (
                   <p className="text-sm text-muted-foreground">{activity.detail}</p>
                   <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-muted-foreground/60">
                     <span className="text-foreground/80">{activity.actorName}</span>
-                    <span>Â·</span>
-                    <span>{format(new Date(activity.createdAt), 'MMM d, yyyy Â· HH:mm')}</span>
+                    <span>·</span>
+                    <span>{format(new Date(activity.createdAt), 'MMM d, yyyy · HH:mm')}</span>
                   </div>
                 </div>
               </div>
@@ -287,14 +456,14 @@ const AuditTrailModal = ({ booking, onClose }) => (
           ) : (
             <div className="py-8 text-center">
               <p className="text-sm text-muted-foreground">No historical activities recorded for this booking yet.</p>
-              <p className="mt-2 text-xs text-muted-foreground/60 italic">Audit tracking started on Apr 17, 2026.</p>
+              <p className="mt-2 text-xs text-muted-foreground/60 italic">A full audit record will appear here after booking actions are stored.</p>
             </div>
           )}
         </div>
       </div>
-      
+
       <div className="border-t border-border bg-muted/30 p-4 flex justify-end">
-        <Button onClick={onClose}>Close trail</Button>
+        <Button onClick={onClose}>Close Trail</Button>
       </div>
     </Card>
   </div>
