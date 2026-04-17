@@ -14,7 +14,7 @@ export const SettingsPage = () => {
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">Module E settings</div>
+            <div className="eyebrow mb-4">Settings Hub</div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Manage theme, account identity, and role-aware workspace preferences.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
               The handover groups authentication, authorization, and theme into one module. This settings page reflects that by combining account overview, appearance controls, and role-sensitive workspace preferences.

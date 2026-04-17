@@ -52,9 +52,17 @@ export const getTickets = async ({ role, userId, status, priority, category, ass
   return jsonRequest(`${MODULE_C_API_BASE}?${search.toString()}`);
 };
 
-export const getTicket = async (ticketId) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}`);
+export const getTicket = async (ticketId, { role, userId } = {}) => {
+  const search = new URLSearchParams();
+  if (role) search.set('requesterRole', toBackendRole(role));
+  if (userId) search.set('requesterId', userId);
+  const suffix = search.toString() ? `?${search.toString()}` : '';
+  return jsonRequest(`${MODULE_C_API_BASE}/${ticketId}${suffix}`);
+};
 export const getTicketSummary = async () => jsonRequest(`${MODULE_C_API_BASE}/summary`);
 export const createTicket = async (payload) => jsonRequest(MODULE_C_API_BASE, { method: 'POST', body: JSON.stringify(payload) });
+export const updateTicket = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}`, { method: 'PUT', body: JSON.stringify(payload) });
+export const deleteTicket = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}`, { method: 'DELETE', body: JSON.stringify(payload) });
 export const assignTechnician = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}/assign`, { method: 'PATCH', body: JSON.stringify(payload) });
 export const updateTicketStatus = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}/status`, { method: 'PATCH', body: JSON.stringify(payload) });
 export const closeTicket = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}/close`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -62,3 +70,4 @@ export const reopenTicket = async (ticketId, payload) => jsonRequest(`${MODULE_C
 export const addComment = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}/comments`, { method: 'POST', body: JSON.stringify(payload) });
 export const updateComment = async (commentId, payload) => jsonRequest(`${MODULE_C_API_BASE}/comments/${commentId}`, { method: 'PUT', body: JSON.stringify(payload) });
 export const deleteComment = async (commentId, payload) => jsonRequest(`${MODULE_C_API_BASE}/comments/${commentId}`, { method: 'DELETE', body: JSON.stringify(payload) });
+

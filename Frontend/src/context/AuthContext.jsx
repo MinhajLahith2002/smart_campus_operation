@@ -3,6 +3,19 @@ import { getCurrentUser, loginWithEmail, logoutSession } from '../lib/authApi';
 
 const AuthContext = createContext(undefined);
 
+const normaliseUser = (role, details = {}) => {
+  const defaults = getRoleCredentials(role);
+  return {
+    id: details.id || defaults.id,
+    name: details.name || defaults.name,
+    email: details.email || defaults.email,
+    campusId: details.campusId || defaults.campusId,
+    phone: details.phone || defaults.phone,
+    role,
+    avatar: details.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`,
+  };
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);

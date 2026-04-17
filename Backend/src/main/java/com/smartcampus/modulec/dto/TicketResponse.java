@@ -3,7 +3,7 @@ package com.smartcampus.modulec.dto;
 import com.smartcampus.modulec.domain.TicketCategory;
 import com.smartcampus.modulec.domain.TicketPriority;
 import com.smartcampus.modulec.domain.TicketStatus;
-import com.smartcampus.modulec.domain.UserRole;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -22,15 +22,34 @@ public record TicketResponse(
         String assignedTechnicianName,
         String resourceName,
         String resourceLocation,
+        String incidentLocation,
+        Long relatedBookingId,
+        String relatedBookingLabel,
         String resourceType,
         String preferredContact,
         String operationalImpact,
         String evidenceNotes,
         String resolutionNotes,
+        String rejectionReason,
+        String assignedByName,
+        OffsetDateTime assignedAt,
+        String technicianStartedByName,
+        OffsetDateTime technicianStartedAt,
+        String resolvedByName,
+        OffsetDateTime resolvedAt,
+        String closedByName,
+        OffsetDateTime closedAt,
+        String rejectedByName,
+        OffsetDateTime rejectedAt,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
         List<String> evidenceLabels,
         List<TicketActivityResponse> activities,
-        List<TicketCommentResponse> comments
+        List<TicketCommentResponse> comments,
+        Long similarOpenIncidents,
+        Integer completenessScore,
+        Integer smartPriorityScore,
+        String smartPriorityLabel,
+        String responseTarget
 ) {
 }

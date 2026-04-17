@@ -1,111 +1,301 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { CalendarClock, CheckCircle2, CircleOff, Layers3, MapPin, Users } from 'lucide-react';
-import { Card, Badge, Button } from '../components/ui/Primitives';
-import { MOCK_BOOKINGS, MOCK_RESOURCES } from '../mockData';
-import { getResources } from '../lib/moduleAApi';
+import { CalendarClock, CheckCircle2, CircleOff, History, Layers3, MapPin, Users, X } from 'lucide-react';
+import { Card, Badge, Button, Input } from '../components/ui/Primitives';
+import { approveBooking, getBookingSummary, getBookings, rejectBooking, cancelBooking } from '../lib/operationsApi';
+import { useAuth } from '../context/AuthContext';
+import { toBackendRole } from '../lib/moduleCApi';
+import { cn } from '../lib/utils';
 
 export const AdminBookingsPage = () => {
-  const [resources, setResources] = useState([]);
-  const pendingBookings = MOCK_BOOKINGS.filter((item) => item.status === 'PENDING');
-  const resourceLookup = useMemo(
-    () => new Map((resources.length ? resources : MOCK_RESOURCES).map((resource) => [String(resource.id), resource])),
-    [resources]
-  );
+  const { user } = useAuth();
+  const [bookings, setBookings] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyBookingId, setBusyBookingId] = useState(null);
+  const [rejectionDrafts, setRejectionDrafts] = useState({});
+  const [filterMode, setFilterMode] = useState('ALL');
+  const [auditBooking, setAuditBooking] = useState(null);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [bookingData, summaryData] = await Promise.all([
+        getBookings({ role: 'ADMIN' }),
+        getBookingSummary(),
+      ]);
+      setBookings(bookingData);
+      setSummary(summaryData);
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to load booking desk data.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let ignore = false;
-
-    const loadResources = async () => {
-      try {
-        const data = await getResources();
-        if (!ignore) setResources(data);
-      } catch (_) {
-        if (!ignore) setResources([]);
-      }
-    };
-
-    loadResources();
-    return () => { ignore = true; };
+    loadData();
   }, []);
+
+  const pendingBookings = useMemo(() => bookings.filter((item) => item.status === 'PENDING'), [bookings]);
+  const cancellationRequests = useMemo(() => bookings.filter((item) => item.cancellationRequestedAt || item.cancellationRequestNote), [bookings]);
+
+  const filteredBookings = useMemo(() => {
+    if (filterMode === 'CANCELLATIONS') return cancellationRequests;
+    return bookings;
+  }, [bookings, cancellationRequests, filterMode]);
+
+  const adminActor = {
+    actorId: user?.id,
+    actorName: user?.name,
+    actorRole: toBackendRole(user?.role),
+  };
+
+  const handleApprove = async (bookingId) => {
+    try {
+      setBusyBookingId(bookingId);
+      await approveBooking(bookingId, { ...adminActor, note: 'Approved from booking desk.' });
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Unable to approve this request.');
+    } finally {
+      setBusyBookingId(null);
+    }
+  };
+
+  const handleReject = async (bookingId) => {
+    try {
+      const note = rejectionDrafts[bookingId]?.trim() || 'Rejected by operations after policy review.';
+      setBusyBookingId(bookingId);
+      await rejectBooking(bookingId, { ...adminActor, note });
+      setRejectionDrafts((current) => ({ ...current, [bookingId]: '' }));
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Unable to reject this request.');
+    } finally {
+      setBusyBookingId(null);
+    }
+  };
+
+  const handleConfirmCancel = async (bookingId) => {
+    try {
+      setBusyBookingId(bookingId);
+      await cancelBooking(bookingId, { ...adminActor, note: 'Cancellation request approved by admin.' });
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Unable to confirm cancellation.');
+    } finally {
+      setBusyBookingId(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
       <section className="surface-strong p-6 md:p-8">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="eyebrow mb-4">Module B admin view</div>
+            <div className="eyebrow mb-4">Booking desk admin view</div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Booking Desk gives operations staff a clear approval queue and conflict-aware review surface.</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-              The handover calls out booking management, optimized booking rules, and double-booking handling. This page turns the sidebar item into a proper administrative review queue with decisions and policy cues.
+              The handover calls out booking management, optimized booking rules, and double-booking handling. This page now runs against the live backend approval workflow.
             </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <DeskMetric label="Pending review" value={`${pendingBookings.length}`} />
-            <DeskMetric label="Approved today" value={`${MOCK_BOOKINGS.filter((item) => item.status === 'APPROVED').length}`} />
-            <DeskMetric label="Rejected/conflict" value={`${MOCK_BOOKINGS.filter((item) => item.status === 'REJECTED').length}`} />
+          <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-1 xl:grid-cols-4">
+            <DeskMetric label="Pending review" value={`${summary?.pending ?? pendingBookings.length}`} />
+            <DeskMetric label="Cancel Requests" value={`${summary?.cancellationRequests ?? cancellationRequests.length}`} variant="danger" />
+            <DeskMetric label="Approved today" value={`${summary?.approved ?? 0}`} />
+            <DeskMetric label="Rejected" value={`${summary?.rejected ?? 0}`} />
           </div>
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Approval queue</h2>
-          <Badge variant="warning">{pendingBookings.length} waiting</Badge>
-        </div>
+      {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
+      {loading && <Card className="p-6 text-sm text-muted-foreground">Loading approval queue...</Card>}
 
-        <div className="space-y-3">
-          {MOCK_BOOKINGS.map((booking) => {
-            const resource = resourceLookup.get(String(booking.resourceId));
-            const isPending = booking.status === 'PENDING';
+      {!loading && (
+        <section className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-xl font-semibold">Approval queue</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setFilterMode('ALL')}
+                className={cn(
+                  'rounded-full px-4 py-1.5 text-xs font-semibold transition-all',
+                  filterMode === 'ALL' ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                )}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFilterMode('CANCELLATIONS')}
+                className={cn(
+                  'flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold transition-all',
+                  filterMode === 'CANCELLATIONS' ? 'bg-danger text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                )}
+              >
+                Cancellation Requests
+                <Badge variant={cancellationRequests.length > 0 ? 'danger' : 'neutral'} className="h-5 min-w-5 px-1 bg-white/20">{cancellationRequests.length}</Badge>
+              </button>
+            </div>
+          </div>
 
-            return (
-              <Card key={booking.id} className="bg-white/70 p-6 dark:bg-white/5">
-                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={booking.status === 'APPROVED' ? 'success' : booking.status === 'REJECTED' ? 'danger' : 'warning'}>
-                        {booking.status}
-                      </Badge>
-                      <Badge variant="info">#{booking.id}</Badge>
+          <div className="space-y-3">
+            {filteredBookings.map((booking) => {
+              const isPending = booking.status === 'PENDING';
+              const isCancellationRequested = !!booking.cancellationRequestedAt || !!booking.cancellationRequestNote;
+
+              return (
+                <Card 
+                  key={booking.id} 
+                  className={cn(
+                    "bg-white/70 p-6 dark:bg-white/5 transition-all",
+                    isCancellationRequested && booking.status !== 'CANCELLED' ? "border-danger/30 ring-1 ring-danger/20 shadow-lg shadow-danger/5" : "border-border/60"
+                  )}
+                >
+                  {isCancellationRequested && booking.status !== 'CANCELLED' && (
+                    <div className="mb-4 flex items-center gap-2 rounded-xl bg-danger/10 px-4 py-2 text-sm font-semibold text-danger">
+                      <div className="h-2 w-2 animate-pulse rounded-full bg-danger" />
+                      Pending Cancellation Request
                     </div>
-                    <h3 className="text-xl font-semibold">{resource?.name}</h3>
-                    <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                      <p className="flex items-center gap-2"><CalendarClock size={14} /> {format(new Date(booking.date), 'MMM d, yyyy')} • {booking.startTime} - {booking.endTime}</p>
-                      <p className="flex items-center gap-2"><Users size={14} /> {booking.attendees} attendees</p>
-                      <p className="flex items-center gap-2"><MapPin size={14} /> {resource?.location}</p>
-                      <p className="flex items-center gap-2"><Layers3 size={14} /> {booking.purpose}</p>
-                    </div>
-                    {booking.rejectionReason && (
-                      <div className="rounded-2xl border border-danger/15 bg-danger/6 px-4 py-3 text-sm text-danger">
-                        <span className="font-semibold">Conflict note:</span> {booking.rejectionReason}
+                  )}
+                  <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={booking.status === 'APPROVED' ? 'success' : booking.status === 'REJECTED' ? 'danger' : 'warning'}>
+                          {booking.status}
+                        </Badge>
+                        <Badge variant="info">#{booking.id}</Badge>
                       </div>
-                    )}
-                  </div>
+                      <h3 className="text-xl font-semibold">{booking.resourceName}</h3>
+                      <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                        <p className="flex items-center gap-2"><CalendarClock size={14} /> {format(new Date(booking.bookingDate), 'MMM d, yyyy')} · {booking.startTime.slice(0, 5)} - {booking.endTime.slice(0, 5)}</p>
+                        <p className="flex items-center gap-2"><Users size={14} /> {booking.attendees} attendees</p>
+                        <p className="flex items-center gap-2"><MapPin size={14} /> {booking.resourceLocation}</p>
+                        <p className="flex items-center gap-2"><Layers3 size={14} /> {booking.purpose}</p>
+                      </div>
 
-                  <div className="flex flex-col gap-3 xl:min-w-52">
-                    {isPending ? (
-                      <>
-                        <Button className="gap-2"><CheckCircle2 size={16} /> Approve request</Button>
-                        <Button variant="outline" className="gap-2 text-danger border-danger/20 hover:bg-danger/10"><CircleOff size={16} /> Reject request</Button>
-                      </>
-                    ) : (
-                      <Button variant="ghost">View audit trail</Button>
-                    )}
+                      {isCancellationRequested && booking.status !== 'CANCELLED' && (
+                        <div className="mt-4 rounded-2xl border border-danger/20 bg-danger/5 px-4 py-4 dark:bg-danger/10">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-danger/80">User Cancellation Reason</p>
+                          <p className="mt-2 text-sm leading-6 text-foreground font-medium italic underline underline-offset-4 decoration-danger/20">
+                            "{booking.cancellationRequestNote || 'No reason provided.'}"
+                          </p>
+                        </div>
+                      )}
+
+                      {booking.rejectionReason && (
+                        <div className="rounded-2xl border border-danger/15 bg-danger/6 px-4 py-3 text-sm text-danger">
+                          <span className="font-semibold">Conflict note:</span> {booking.rejectionReason}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-3 xl:min-w-64">
+                      {isCancellationRequested && booking.status !== 'CANCELLED' ? (
+                        <Button 
+                          className="gap-2 bg-danger hover:bg-danger/90 text-white border-transparent" 
+                          isLoading={busyBookingId === booking.id} 
+                          onClick={() => handleConfirmCancel(booking.id)}
+                        >
+                          <CircleOff size={16} /> Confirm Cancellation
+                        </Button>
+                      ) : null}
+                      
+                      {isPending && !isCancellationRequested ? (
+                        <>
+                          <Button className="gap-2" isLoading={busyBookingId === booking.id} onClick={() => handleApprove(booking.id)}><CheckCircle2 size={16} /> Approve request</Button>
+                          <Input
+                            placeholder="Rejection reason if declining"
+                            value={rejectionDrafts[booking.id] || ''}
+                            onChange={(event) => setRejectionDrafts((current) => ({ ...current, [booking.id]: event.target.value }))}
+                          />
+                          <Button variant="outline" className="gap-2 text-danger border-danger/20 hover:bg-danger/10" isLoading={busyBookingId === booking.id} onClick={() => handleReject(booking.id)}><CircleOff size={16} /> Reject request</Button>
+                        </>
+                      ) : null}
+                      
+                      {!isPending && !isCancellationRequested ? (
+                        <Button variant="ghost" className="gap-2" onClick={() => setAuditBooking(booking)}>
+                          <History size={16} /> View audit trail
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      </section>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {auditBooking && (
+        <AuditTrailModal 
+          booking={auditBooking} 
+          onClose={() => setAuditBooking(null)} 
+        />
+      )}
     </div>
   );
 };
 
-const DeskMetric = ({ label, value }) => (
+const DeskMetric = ({ label, value, variant }) => (
   <Card className="bg-white/65 p-5 text-center dark:bg-white/5">
     <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
-    <p className="mt-3 text-3xl font-semibold">{value}</p>
+    <p className={cn("mt-3 text-3xl font-semibold", variant === 'danger' && "text-danger")}>{value}</p>
   </Card>
+);
+
+const AuditTrailModal = ({ booking, onClose }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-300">
+    <Card className="relative w-full max-w-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xl animate-in zoom-in-95 duration-200">
+      <div className="flex items-center justify-between border-b border-border p-6">
+        <div>
+          <h3 className="text-xl font-semibold">Booking Audit Trail</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Historical activity for #{booking.id} - {booking.resourceName}</p>
+        </div>
+        <button onClick={onClose} className="rounded-full p-2 hover:bg-muted transition-colors">
+          <X size={20} />
+        </button>
+      </div>
+      
+      <div className="max-h-[60vh] overflow-y-auto p-6">
+        <div className="relative space-y-8 before:absolute before:left-3.5 before:top-2 before:h-[calc(100%-16px)] before:w-0.5 before:bg-border">
+          {booking.activities?.length > 0 ? (
+            booking.activities.map((activity, index) => (
+              <div key={activity.id} className="relative pl-10">
+                <div className={cn(
+                  "absolute left-0 flex h-7 w-7 items-center justify-center rounded-full border-2 bg-white dark:bg-slate-900",
+                  index === 0 ? "border-primary ring-4 ring-primary/10" : "border-border"
+                )}>
+                  <div className={cn("h-2 w-2 rounded-full", index === 0 ? "bg-primary" : "bg-muted-foreground/40")} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold uppercase tracking-wider text-foreground">{activity.action.replace(/_/g, ' ')}</span>
+                    <Badge variant="neutral" className="px-1.5 py-0.5 text-[10px]">{activity.actorRole}</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{activity.detail}</p>
+                  <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-muted-foreground/60">
+                    <span className="text-foreground/80">{activity.actorName}</span>
+                    <span>·</span>
+                    <span>{format(new Date(activity.createdAt), 'MMM d, yyyy · HH:mm')}</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">No historical activities recorded for this booking yet.</p>
+              <p className="mt-2 text-xs text-muted-foreground/60 italic">Audit tracking started on Apr 17, 2026.</p>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="border-t border-border bg-muted/30 p-4 flex justify-end">
+        <Button onClick={onClose}>Close trail</Button>
+      </div>
+    </Card>
+  </div>
 );

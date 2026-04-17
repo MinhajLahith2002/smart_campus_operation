@@ -7,6 +7,7 @@ export const DEMO_ROLE_CREDENTIALS = {
     email: 'student@campus.edu',
     campusId: 'ST2026001',
     password: 'Student@123',
+    phone: '0771234567',
   },
   ADMIN: {
     role: 'ADMIN',
@@ -16,6 +17,7 @@ export const DEMO_ROLE_CREDENTIALS = {
     email: 'admin@campus.edu',
     campusId: 'AD2026001',
     password: 'Admin@123',
+    phone: '0112345678',
   },
   TECHNICIAN: {
     role: 'TECHNICIAN',
@@ -25,6 +27,7 @@ export const DEMO_ROLE_CREDENTIALS = {
     email: 'tech@campus.edu',
     campusId: 'TE2026001',
     password: 'Tech@123',
+    phone: '0710856475',
   },
 };
 

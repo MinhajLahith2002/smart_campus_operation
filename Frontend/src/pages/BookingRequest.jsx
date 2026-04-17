@@ -1,17 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { MOCK_RESOURCES } from '../mockData';
 import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Calendar, Clock, Users, Info, ArrowLeft, CheckCircle2, MapPin, ShieldCheck, ClipboardList, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
-import { formatAvailabilityWindow, getResource } from '../lib/moduleAApi';
+import { useAuth } from '../context/AuthContext';
+import { createBooking, getResource, getBooking, updateBooking } from '../lib/operationsApi';
+import { toBackendRole } from '../lib/moduleCApi';
+import { formatAvailabilityWindow } from '../lib/moduleAApi';
 
 export const BookingRequest = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const resourceId = searchParams.get('resourceId');
-  const fallbackResource = useMemo(() => MOCK_RESOURCES.find((resource) => String(resource.id) === String(resourceId)), [resourceId]);
-  const [resource, setResource] = useState(fallbackResource || null);
+  const editId = searchParams.get('editId');
+  const [resource, setResource] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchingBooking, setFetchingBooking] = useState(false);
+  const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
 
   const [formData, setFormData] = useState({
@@ -19,37 +25,82 @@ export const BookingRequest = () => {
     startTime: '09:00',
     endTime: '10:00',
     purpose: '',
-    attendees: 1
+    attendees: 1,
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
-    let ignore = false;
-
+    let active = true;
     const loadResource = async () => {
-      if (!resourceId) return;
+      if (!resourceId) {
+        setLoading(false);
+        return;
+      }
       try {
         const data = await getResource(resourceId);
-        if (!ignore) setResource(data);
+        if (!active) return;
+        setResource(data);
+        setFormData((current) => ({ ...current, attendees: Math.min(current.attendees, data.capacity || 1) || 1 }));
       } catch (err) {
-        if (!ignore) {
-          setResource(fallbackResource || null);
+        if (active) {
+          setError(err.message || 'Unable to load the selected resource.');
           setLoadError(err.message || 'Unable to refresh resource details.');
         }
+      } finally {
+        if (active) setLoading(false);
       }
     };
-
     loadResource();
-    return () => { ignore = true; };
-  }, [fallbackResource, resourceId]);
+    return () => {
+      active = false;
+    };
+  }, [resourceId]);
+
+  useEffect(() => {
+    let active = true;
+    const loadBooking = async () => {
+      if (!editId) return;
+      try {
+        setFetchingBooking(true);
+        const booking = await getBooking(editId);
+        if (!active) return;
+        setFormData({
+          date: booking.bookingDate,
+          startTime: booking.startTime.slice(0, 5),
+          endTime: booking.endTime.slice(0, 5),
+          purpose: booking.purpose,
+          attendees: booking.attendees,
+        });
+      } catch (err) {
+        if (active) setError(err.message || 'Unable to load booking details for editing.');
+      } finally {
+        if (active) setFetchingBooking(false);
+      }
+    };
+    loadBooking();
+    return () => {
+      active = false;
+    };
+  }, [editId]);
+
+  const helperError = useMemo(() => {
+    if (!resource) return '';
+    if (formData.endTime <= formData.startTime) return 'End time must be later than start time.';
+    if (formData.attendees > resource.capacity) return 'Attendee count exceeds the resource capacity.';
+    return '';
+  }, [formData, resource]);
+
+  if (loading) {
+    return <Card className="mx-auto max-w-4xl p-8 text-sm text-muted-foreground">Loading resource booking context...</Card>;
+  }
 
   if (!resource) {
     return (
-      <div className="text-center py-20">
+      <div className="py-20 text-center">
         <h2 className="text-2xl font-bold">Resource not found</h2>
-        {loadError && <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>}
+        <p className="mt-2 text-sm text-muted-foreground">{error || loadError || 'The selected resource could not be loaded.'}</p>
         <Button variant="ghost" onClick={() => navigate('/catalogue')} className="mt-4">
           Back to Catalogue
         </Button>
@@ -57,14 +108,44 @@ export const BookingRequest = () => {
     );
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!user) {
+      setError('You must be signed in to create a booking.');
+      return;
+    }
+    if (helperError) {
+      setError(helperError);
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setError('');
+      const payload = {
+        resourceId: Number(resource.id),
+        requesterId: user.id,
+        requesterName: user.name,
+        requesterEmail: user.email,
+        requesterRole: toBackendRole(user.role),
+        date: formData.date,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
+        purpose: formData.purpose,
+        attendees: Number(formData.attendees),
+      };
+
+      if (editId) {
+        await updateBooking(editId, payload);
+      } else {
+        await createBooking(payload);
+      }
       setIsSuccess(true);
-    }, 1500);
+    } catch (err) {
+      setError(err.message || 'Unable to submit the booking request.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSuccess) {
@@ -90,7 +171,7 @@ export const BookingRequest = () => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="mx-auto max-w-5xl space-y-8">
       <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary"
@@ -102,7 +183,9 @@ export const BookingRequest = () => {
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <div className="eyebrow mb-4">Booking workflow</div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Submit a booking request with policy and resource context visible the whole way through.</h1>
+            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+              {editId ? 'Modify your reservation request details before admin review begins.' : 'Submit a booking request with policy and resource context visible.'}
+            </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
               This flow is redesigned around the handover idea of approval-aware requests. The form keeps the asset summary, operational rules, and approval journey close to the input fields.
             </p>
@@ -120,56 +203,56 @@ export const BookingRequest = () => {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
           <Card className="bg-white/70 p-8 dark:bg-white/5">
             <h2 className="mb-6 text-2xl font-semibold">Request details</h2>
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm font-semibold">
                     <Calendar size={16} className="text-primary" /> Date
                   </label>
-                  <Input 
-                    type="date" 
+                  <Input
+                    type="date"
                     value={formData.date}
-                    onChange={e => setFormData({...formData, date: e.target.value})}
-                    required 
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm font-semibold">
                     <Users size={16} className="text-primary" /> Expected Attendees
                   </label>
-                  <Input 
-                    type="number" 
-                    min="1" 
+                  <Input
+                    type="number"
+                    min="1"
                     max={resource.capacity}
                     value={formData.attendees}
-                    onChange={e => setFormData({...formData, attendees: parseInt(e.target.value)})}
-                    required 
+                    onChange={(e) => setFormData({ ...formData, attendees: Number(e.target.value) })}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm font-semibold">
                     <Clock size={16} className="text-primary" /> Start Time
                   </label>
-                  <Input 
-                    type="time" 
+                  <Input
+                    type="time"
                     value={formData.startTime}
-                    onChange={e => setFormData({...formData, startTime: e.target.value})}
-                    required 
+                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm font-semibold">
                     <Clock size={16} className="text-primary" /> End Time
                   </label>
-                  <Input 
-                    type="time" 
+                  <Input
+                    type="time"
                     value={formData.endTime}
-                    onChange={e => setFormData({...formData, endTime: e.target.value})}
-                    required 
+                    onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                    required
                   />
                 </div>
               </div>
@@ -180,7 +263,7 @@ export const BookingRequest = () => {
                   className="min-h-[120px] w-full rounded-xl border border-border bg-white/45 px-3 py-3 text-sm backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/5"
                   placeholder="Describe the event or activity..."
                   value={formData.purpose}
-                  onChange={e => setFormData({...formData, purpose: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
                   required
                 />
               </div>
@@ -199,9 +282,11 @@ export const BookingRequest = () => {
                 </div>
               </div>
 
+              {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
+
               <div className="pt-2">
-                <Button type="submit" className="w-full py-6 text-lg gap-2" isLoading={isSubmitting}>
-                  Submit Booking Request
+                <Button type="submit" className="w-full gap-2 py-6 text-lg" isLoading={isSubmitting}>
+                  {editId ? 'Update Booking Request' : 'Submit Booking Request'}
                   {!isSubmitting && <ArrowRight size={18} />}
                 </Button>
               </div>
@@ -211,7 +296,7 @@ export const BookingRequest = () => {
 
         <div className="space-y-6">
           <Card className="overflow-hidden p-0 bg-white/70 dark:bg-white/5">
-            <img src={resource.imageUrl} alt="" className="w-full h-40 object-cover" />
+            <img src={resource.imageUrl} alt="" className="h-40 w-full object-cover" />
             <div className="p-6">
               <Badge variant="info" className="mb-2">{resource.type.replace('_', ' ')}</Badge>
               <h3 className="mb-2 text-xl font-semibold">{resource.name}</h3>
@@ -234,7 +319,7 @@ export const BookingRequest = () => {
               <Info size={18} className="text-primary" />
               Booking Rules
             </div>
-            <ul className="text-xs space-y-2 text-muted-foreground list-disc pl-4">
+            <ul className="list-disc space-y-2 pl-4 text-xs text-muted-foreground">
               <li>Requests must be submitted at least 24 hours in advance.</li>
               <li>Cancellations are allowed up to 2 hours before the start time.</li>
               <li>Users are responsible for the equipment and cleanliness of the facility.</li>
@@ -259,11 +344,7 @@ export const BookingRequest = () => {
   );
 };
 
-const InlineMetric = ({
-  icon,
-  label,
-  value,
-}) => (
+const InlineMetric = ({ icon, label, value }) => (
   <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
     <div className="flex items-center gap-2 text-sm text-slate-300">
       {icon}
