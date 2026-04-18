@@ -110,7 +110,7 @@ public class AuthController {
     public AuthResponse acceptInvite(@Valid @RequestBody InviteAcceptanceRequest request,
                                      HttpServletRequest httpRequest,
                                      HttpServletResponse httpResponse) {
-        return authService.acceptTechnicianInvite(request, httpRequest, httpResponse);
+        return authService.acceptInvite(request, httpRequest, httpResponse);
     }
 
     private String resolveClientAddress(HttpServletRequest request) {

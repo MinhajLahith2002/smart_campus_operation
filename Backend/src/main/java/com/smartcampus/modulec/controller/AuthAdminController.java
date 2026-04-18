@@ -4,9 +4,9 @@ import com.smartcampus.modulec.domain.AccountStatus;
 import com.smartcampus.modulec.domain.AuthProviderType;
 import com.smartcampus.modulec.domain.UserRole;
 import com.smartcampus.modulec.dto.AuthUserResponse;
-import com.smartcampus.modulec.dto.CreateTechnicianInviteRequest;
-import com.smartcampus.modulec.dto.TechnicianInviteResponse;
+import com.smartcampus.modulec.dto.CreateUserInviteRequest;
 import com.smartcampus.modulec.dto.UpdateUserStatusRequest;
+import com.smartcampus.modulec.dto.UserInviteResponse;
 import com.smartcampus.modulec.security.AuthUserPrincipal;
 import com.smartcampus.modulec.service.AuthAdminService;
 import com.smartcampus.modulec.service.AuthService;
@@ -50,23 +50,23 @@ public class AuthAdminController {
     }
 
     @PostMapping("/invites")
-    public TechnicianInviteResponse inviteTechnician(@Valid @RequestBody CreateTechnicianInviteRequest request,
-                                                     @AuthenticationPrincipal AuthUserPrincipal principal) {
-        return authAdminService.createTechnicianInvite(request, principal);
+    public UserInviteResponse createInvite(@Valid @RequestBody CreateUserInviteRequest request,
+                                           @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return authAdminService.createInvite(request, principal);
     }
 
     @GetMapping("/invites")
-    public List<TechnicianInviteResponse> getInvites() {
+    public List<UserInviteResponse> getInvites() {
         return authAdminService.getInvites();
     }
 
     @PostMapping("/invites/{inviteId}/resend")
-    public TechnicianInviteResponse resendInvite(@PathVariable Long inviteId) {
+    public UserInviteResponse resendInvite(@PathVariable Long inviteId) {
         return authAdminService.resendInvite(inviteId);
     }
 
     @PostMapping("/invites/{inviteId}/revoke")
-    public TechnicianInviteResponse revokeInvite(@PathVariable Long inviteId) {
+    public UserInviteResponse revokeInvite(@PathVariable Long inviteId) {
         return authAdminService.revokeInvite(inviteId);
     }
 }

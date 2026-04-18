@@ -17,6 +17,12 @@ export const InviteSetupPage = () => {
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const passwordChecklist = useMemo(() => getPasswordChecklist(form.password), [form.password]);
+  const inviteRole = invite?.role === 'ADMIN' ? 'ADMIN' : 'TECHNICIAN';
+  const roleLabel = inviteRole === 'ADMIN' ? 'Admin' : 'Technician';
+  const roleBadgeVariant = inviteRole === 'ADMIN' ? 'warning' : 'info';
+  const roleIconTone = inviteRole === 'ADMIN'
+    ? 'rounded-2xl bg-[rgba(245,158,11,0.12)] p-3 text-warning dark:bg-[rgba(245,158,11,0.18)]'
+    : 'rounded-2xl bg-[rgba(47,91,255,0.1)] p-3 text-[var(--auth-accent)] dark:bg-[rgba(125,167,255,0.14)]';
 
   useEffect(() => {
     if (!token) {
@@ -42,7 +48,7 @@ export const InviteSetupPage = () => {
       await acceptInvite({ token, ...form });
       navigate('/dashboard');
     } catch (error) {
-      setLoadingError(error.message || 'Unable to complete technician setup.');
+      setLoadingError(error.message || `Unable to complete ${roleLabel.toLowerCase()} setup.`);
     } finally {
       setSubmitting(false);
     }
@@ -91,9 +97,9 @@ export const InviteSetupPage = () => {
 
       <Card className="bg-[linear-gradient(180deg,var(--auth-surface-strong),var(--auth-surface))] p-8">
         <div className="mb-6 flex items-center gap-3">
-          <div className="rounded-2xl bg-[rgba(47,91,255,0.1)] p-3 text-[var(--auth-accent)] dark:bg-[rgba(125,167,255,0.14)]"><Wrench size={20} /></div>
+          <div className={roleIconTone}><Wrench size={20} /></div>
           <div>
-            <p className="auth-kicker text-xs font-bold uppercase tracking-[0.24em]">Technician invite</p>
+            <p className="auth-kicker text-xs font-bold uppercase tracking-[0.24em]">{roleLabel} invite</p>
             <h1 className="mt-1 text-2xl font-semibold">Complete your setup</h1>
           </div>
         </div>
@@ -110,7 +116,10 @@ export const InviteSetupPage = () => {
               <p className="text-sm font-semibold">{invite.fullName}</p>
               <p className="auth-copy mt-1 text-sm">{invite.email}</p>
             </div>
-            <Badge variant="info">{invite.status}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant={roleBadgeVariant}>{inviteRole}</Badge>
+              <Badge variant="info">{invite.status}</Badge>
+            </div>
           </div>
         </div>
 
@@ -137,11 +146,13 @@ export const InviteSetupPage = () => {
               ))}
             </div>
           </div>
-          <Button type="submit" className="auth-primary-button w-full rounded-full text-white" size="lg" isLoading={submitting} disabled={submitting}>Activate Technician Account</Button>
+          <Button type="submit" className="auth-primary-button w-full rounded-full text-white" size="lg" isLoading={submitting} disabled={submitting}>Activate {roleLabel} Account</Button>
 
           <div className="rounded-[22px] border border-[color:var(--auth-input-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(245,247,251,0.96))] px-4 py-4 text-sm leading-7 dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))]">
             <div className="mb-2 flex items-center gap-2 font-semibold text-foreground"><ShieldCheck size={16} className="text-[var(--auth-accent)]" /> Access policy</div>
-            Technician accounts stay invite-controlled and local-only. After setup, sign in again with the invited email address and password instead of Google.
+            {inviteRole === 'ADMIN'
+              ? 'Admin accounts stay invite-controlled and local-only. After setup, sign in again with the invited email address and password to access the administration workspace.'
+              : 'Technician accounts stay invite-controlled and local-only. After setup, sign in again with the invited email address and password instead of Google.'}
           </div>
         </form>
       </Card>

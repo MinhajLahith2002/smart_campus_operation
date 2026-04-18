@@ -13,5 +13,5 @@ public interface AuthMailService {
 
     void sendPasswordResetEmail(AuthUser user, String resetLink);
 
-    void sendTechnicianInviteEmail(TechnicianInvite invite, String inviteLink);
+    void sendUserInviteEmail(TechnicianInvite invite, String inviteLink);
 }

@@ -87,9 +87,14 @@ export const updateAdminUserStatus = async (userId, status) => request(`/admin/u
   body: JSON.stringify({ status }),
 });
 
-export const getTechnicianInvites = async () => request('/admin/invites');
-export const createTechnicianInvite = async (payload) => request('/admin/invites', { method: 'POST', body: JSON.stringify(payload) });
-export const resendTechnicianInvite = async (inviteId) => request(`/admin/invites/${inviteId}/resend`, { method: 'POST' });
-export const revokeTechnicianInvite = async (inviteId) => request(`/admin/invites/${inviteId}/revoke`, { method: 'POST' });
+export const getAdminInvites = async () => request('/admin/invites');
+export const createUserInvite = async (payload) => request('/admin/invites', { method: 'POST', body: JSON.stringify(payload) });
+export const resendUserInvite = async (inviteId) => request(`/admin/invites/${inviteId}/resend`, { method: 'POST' });
+export const revokeUserInvite = async (inviteId) => request(`/admin/invites/${inviteId}/revoke`, { method: 'POST' });
+
+export const getTechnicianInvites = getAdminInvites;
+export const createTechnicianInvite = async (payload) => createUserInvite({ ...payload, role: 'TECHNICIAN' });
+export const resendTechnicianInvite = resendUserInvite;
+export const revokeTechnicianInvite = revokeUserInvite;
 
 export { API_BASE };

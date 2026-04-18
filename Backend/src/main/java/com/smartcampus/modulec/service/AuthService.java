@@ -321,12 +321,13 @@ public class AuthService {
         return new InviteDetailsResponse(
                 invite.getEmail(),
                 invite.getFullName(),
+                invite.getInvitedRole(),
                 inviteStatus(invite),
                 invite.getExpiresAt()
         );
     }
 
-    public AuthResponse acceptTechnicianInvite(InviteAcceptanceRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+    public AuthResponse acceptInvite(InviteAcceptanceRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         validatePasswordChange(request.password(), request.confirmPassword());
         TechnicianInvite invite = technicianInviteRepository.findByTokenHash(hashToken(request.token()))
                 .orElseThrow(() -> new IllegalArgumentException("This invite link is invalid or has expired."));
@@ -337,7 +338,7 @@ public class AuthService {
         AuthUser user = invite.getUser();
         user.setFullName(invite.getFullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(UserRole.TECHNICIAN);
+        user.setRole(invite.getInvitedRole());
         user.setStatus(AccountStatus.ACTIVE);
         user.setAuthProviderType(AuthProviderType.LOCAL);
         user.setGoogleId(null);

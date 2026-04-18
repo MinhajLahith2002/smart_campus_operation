@@ -85,7 +85,7 @@ class AuthControllerIntegrationTest {
                 .forEach(authUserRepository::delete);
         doNothing().when(authMailService).sendVerificationEmail(any(), any());
         doNothing().when(authMailService).sendPasswordResetEmail(any(), any());
-        doNothing().when(authMailService).sendTechnicianInviteEmail(any(), any());
+        doNothing().when(authMailService).sendUserInviteEmail(any(), any());
     }
 
     @Test
@@ -384,7 +384,8 @@ class AuthControllerIntegrationTest {
                         .content("""
                                 {
                                   "fullName":"Campus Technician",
-                                  "email":"technician.flow@campus.edu"
+                                  "email":"technician.flow@campus.edu",
+                                  "role":"TECHNICIAN"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -397,12 +398,13 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$[?(@.email=='technician.flow@campus.edu' && @.status=='PENDING')]").exists());
 
         ArgumentCaptor<String> inviteLinkCaptor = ArgumentCaptor.forClass(String.class);
-        verify(authMailService).sendTechnicianInviteEmail(any(), inviteLinkCaptor.capture());
+        verify(authMailService).sendUserInviteEmail(any(), inviteLinkCaptor.capture());
         String rawToken = extractToken(inviteLinkCaptor.getValue());
 
         mockMvc.perform(get("/api/auth/invitations/{token}", rawToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email", is("technician.flow@campus.edu")))
+                .andExpect(jsonPath("$.role", is("TECHNICIAN")))
                 .andExpect(jsonPath("$.status", is("PENDING")));
 
         MvcResult acceptanceResult = mockMvc.perform(post("/api/auth/invitations/accept")
@@ -439,6 +441,66 @@ class AuthControllerIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.user.role", is("TECHNICIAN")));
+    }
+
+    @Test
+    void invitedAdminCompleteSetupCanAccessAdminUserManagement() throws Exception {
+        MockHttpSession seededAdminSession = loginAndGetSession("admin@campus.edu", "Admin@123!");
+
+        mockMvc.perform(post("/api/auth/admin/invites")
+                        .session(seededAdminSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName":"Operations Admin Two",
+                                  "email":"admin.two@campus.edu",
+                                  "role":"ADMIN"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("admin.two@campus.edu")))
+                .andExpect(jsonPath("$.role", is("ADMIN")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        ArgumentCaptor<String> adminInviteLinkCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authMailService).sendUserInviteEmail(any(), adminInviteLinkCaptor.capture());
+        String rawToken = extractToken(adminInviteLinkCaptor.getValue());
+
+        mockMvc.perform(get("/api/auth/invitations/{token}", rawToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("admin.two@campus.edu")))
+                .andExpect(jsonPath("$.role", is("ADMIN")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        MvcResult invitedAdminAcceptance = mockMvc.perform(post("/api/auth/invitations/accept")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token":"%s",
+                                  "password":"AdminTwo@123",
+                                  "confirmPassword":"AdminTwo@123"
+                                }
+                                """.formatted(rawToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.email", is("admin.two@campus.edu")))
+                .andExpect(jsonPath("$.user.role", is("ADMIN")))
+                .andExpect(jsonPath("$.user.status", is("ACTIVE")))
+                .andReturn();
+
+        MockHttpSession invitedAdminSession = (MockHttpSession) invitedAdminAcceptance.getRequest().getSession(false);
+
+        mockMvc.perform(get("/api/auth/admin/users")
+                        .session(invitedAdminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.email=='admin@campus.edu' && @.role=='ADMIN')]").exists());
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin.two@campus.edu","password":"AdminTwo@123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role", is("ADMIN")));
     }
 
     @Test

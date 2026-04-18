@@ -64,19 +64,22 @@ public class SmtpAuthMailService implements AuthMailService {
     }
 
     @Override
-    public void sendTechnicianInviteEmail(TechnicianInvite invite, String inviteLink) {
+    public void sendUserInviteEmail(TechnicianInvite invite, String inviteLink) {
+        String roleName = invite.getInvitedRole() == null
+                ? "technician"
+                : invite.getInvitedRole().name().toLowerCase();
         sendEmail(
                 invite.getEmail(),
-                "Complete your CampusHub technician account setup",
+                "Complete your CampusHub %s account setup".formatted(roleName),
                 """
                 Hello %s,
 
-                You have been invited to join CampusHub as a technician. Complete your account setup with the link below:
+                You have been invited to join CampusHub as a %s. Complete your account setup with the link below:
 
                 %s
 
                 If you were not expecting this invite, you can safely ignore this email.
-                """.formatted(invite.getFullName(), inviteLink)
+                """.formatted(invite.getFullName(), roleName, inviteLink)
         );
     }
 
