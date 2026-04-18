@@ -6,12 +6,7 @@ import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
 import { Button, Badge } from './ui/Primitives';
 
-const defaultLinks = [
-  { type: 'route', to: '/', label: 'Home' },
-  { href: '#overview', label: 'Overview' },
-  { href: '#modules', label: 'Modules' },
-  { href: '#access-paths', label: 'Access' },
-];
+const defaultLinks = [];
 
 export const Navbar = ({
   title = 'CampusHub',
@@ -19,6 +14,7 @@ export const Navbar = ({
   links = defaultLinks,
   fixed = false,
   className,
+  showThemeSwitcher = false,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,7 +46,7 @@ export const Navbar = ({
 
     window.addEventListener('resize', updateHeight);
     return () => window.removeEventListener('resize', updateHeight);
-  }, [fixed, mobileMenuOpen, isAuthenticated, location.pathname, location.hash]);
+  }, [fixed, mobileMenuOpen, isAuthenticated, location.pathname, location.hash, showThemeSwitcher]);
 
   const getLinkClasses = () => cn(
     'relative px-2 py-2 text-sm font-medium text-muted-foreground transition-colors duration-200',
@@ -59,7 +55,12 @@ export const Navbar = ({
   );
 
   const brand = (
-    <div className="flex min-w-0 items-center gap-3">
+    <button
+      type="button"
+      onClick={() => navigate('/')}
+      className="flex min-w-0 items-center gap-3 rounded-2xl text-left transition-opacity duration-200 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+      aria-label="Go to home page"
+    >
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white">
         <Radar size={20} />
       </div>
@@ -67,24 +68,19 @@ export const Navbar = ({
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
         <p className="text-sm font-semibold">{subtitle}</p>
       </div>
-    </div>
+    </button>
   );
 
-  const themeControls = (
-    <ThemeSwitcher
-      theme={theme}
-      onChange={setTheme}
-      className="self-start lg:self-auto"
-    />
-  );
+  const themeSwitcher = showThemeSwitcher ? (
+    <ThemeSwitcher theme={theme} onChange={setTheme} />
+  ) : null;
 
   const desktopActions = isAuthenticated ? (
     <>
-      {themeControls}
       <div className="glass-panel flex items-center gap-3 px-3 py-2">
         <img src={user?.avatar} alt="Avatar" className="h-10 w-10 rounded-2xl border border-border bg-muted/80" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{user?.name}</p>
+          <p className="truncate text-sm font-semibold">{user?.name || user?.email?.split('@')?.[0] || 'Campus User'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant="info">{user?.role}</Badge>
             <span className="text-xs text-muted-foreground">{user?.email}</span>
@@ -102,7 +98,7 @@ export const Navbar = ({
     </>
   ) : (
     <>
-      {themeControls}
+      {themeSwitcher}
       <Button variant="outline" size="lg" className="gap-2" onClick={() => navigate('/register')}>
         <UserRound size={16} />
         Student Register
@@ -119,7 +115,7 @@ export const Navbar = ({
       <div className="glass-panel flex items-center gap-3 px-3 py-2">
         <img src={user?.avatar} alt="Avatar" className="h-10 w-10 rounded-2xl border border-border bg-muted/80" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{user?.name}</p>
+          <p className="truncate text-sm font-semibold">{user?.name || user?.email?.split('@')?.[0] || 'Campus User'}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant="info">{user?.role}</Badge>
             <span className="text-xs text-muted-foreground">{user?.email}</span>
@@ -139,6 +135,7 @@ export const Navbar = ({
     </>
   ) : (
     <>
+      {themeSwitcher && <div className="pb-1">{themeSwitcher}</div>}
       <div className="flex flex-col gap-3 sm:flex-row">
         <Button variant="outline" className="gap-2 sm:flex-1" onClick={() => navigate('/register')}>
           <UserRound size={16} />
@@ -172,7 +169,7 @@ export const Navbar = ({
 
       {mobileMenuOpen && (
         <div className="mt-4 space-y-4 border-t border-border pt-4 lg:hidden">
-          <div className="flex items-center justify-between gap-3">
+          {links.length > 0 && (
             <div className="flex min-w-0 items-center gap-4 overflow-x-auto whitespace-nowrap pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {links.map((item) => (
                 item.type === 'route' ? (
@@ -199,10 +196,7 @@ export const Navbar = ({
                 )
               ))}
             </div>
-            <div className="shrink-0">
-              {themeControls}
-            </div>
-          </div>
+          )}
           {mobileActions}
         </div>
       )}
@@ -254,7 +248,7 @@ export const Navbar = ({
   return navbarContent;
 };
 
-const ThemeSwitcher = ({ theme, onChange, className }) => {
+const ThemeSwitcher = ({ theme, onChange }) => {
   const options = [
     { value: 'light', label: 'Light', icon: Sun },
     { value: 'dark', label: 'Dark', icon: Moon },
@@ -262,13 +256,7 @@ const ThemeSwitcher = ({ theme, onChange, className }) => {
   ];
 
   return (
-    <div
-      className={cn(
-        'inline-flex items-center rounded-full border border-border bg-white/75 p-1 shadow-[0_10px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm dark:bg-white/5',
-        className
-      )}
-      aria-label="Theme selection"
-    >
+    <div className="inline-flex items-center rounded-full border border-border bg-white/75 p-1 shadow-[0_10px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm dark:bg-white/5">
       {options.map((option) => {
         const Icon = option.icon;
         const selected = theme === option.value;
@@ -296,3 +284,5 @@ const ThemeSwitcher = ({ theme, onChange, className }) => {
     </div>
   );
 };
+
+

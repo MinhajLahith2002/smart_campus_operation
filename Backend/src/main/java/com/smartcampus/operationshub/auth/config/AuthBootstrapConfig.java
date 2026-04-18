@@ -69,10 +69,8 @@ public class AuthBootstrapConfig {
         }
 
         String email = normalizeEmail(student.getEmail());
-        AuthUser user = findSeedUser(authUserRepository, "sample-student", email);
-        if (!StringUtils.hasText(user.getPublicId())) {
-            user.setPublicId("sample-student");
-        }
+        AuthUser user = findSeedUser(authUserRepository, "student-01", email);
+        user.setPublicId("student-01");
         user.setFullName(student.getFullName().trim());
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(student.getPassword()));
@@ -100,10 +98,8 @@ public class AuthBootstrapConfig {
         }
 
         String email = normalizeEmail(technician.getEmail());
-        AuthUser user = findSeedUser(authUserRepository, "sample-technician", email);
-        if (!StringUtils.hasText(user.getPublicId())) {
-            user.setPublicId("sample-technician");
-        }
+        AuthUser user = findSeedUser(authUserRepository, "tech-17", email);
+        user.setPublicId("tech-17");
         user.setFullName(technician.getFullName().trim());
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(technician.getPassword()));
@@ -141,3 +137,4 @@ public class AuthBootstrapConfig {
         return email.trim().toLowerCase(Locale.ROOT);
     }
 }
+

@@ -78,6 +78,30 @@
   ::selection {
     background: rgba(37, 99, 235, 0.2);
   }
+
+  select {
+    color: var(--foreground);
+    background-color: var(--panel-strong);
+    color-scheme: light;
+  }
+
+  select option,
+  select optgroup {
+    color: #0f172a;
+    background-color: #ffffff;
+  }
+
+  .dark select {
+    color: var(--foreground);
+    background-color: #07111d;
+    color-scheme: dark;
+  }
+
+  .dark select option,
+  .dark select optgroup {
+    color: #ecfeff !important;
+    background-color: #07111d !important;
+  }
 }
 
 @layer components {

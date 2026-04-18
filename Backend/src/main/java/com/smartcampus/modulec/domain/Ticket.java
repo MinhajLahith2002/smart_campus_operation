@@ -214,3 +214,4 @@ public class Ticket {
     public List<TicketComment> getComments() { return comments; }
     public void setComments(List<TicketComment> comments) { this.comments = comments; }
 }
+

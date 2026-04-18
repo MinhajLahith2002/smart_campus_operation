@@ -1,5 +1,6 @@
 package com.smartcampus.modulec.controller;
 
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import com.smartcampus.modulec.dto.AssignTechnicianRequest;
 import com.smartcampus.modulec.dto.CreateTicketRequest;
 import com.smartcampus.modulec.dto.TicketCommentRequest;
@@ -9,9 +10,11 @@ import com.smartcampus.modulec.dto.TicketQuery;
 import com.smartcampus.modulec.dto.TicketResponse;
 import com.smartcampus.modulec.dto.TicketSummaryResponse;
 import com.smartcampus.modulec.dto.UpdateTicketStatusRequest;
-import com.smartcampus.modulec.service.TicketService;
 import com.smartcampus.operationshub.auth.security.AuthUserPrincipal;
+import com.smartcampus.modulec.service.TicketService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -53,6 +57,19 @@ public class TicketController {
     public TicketResponse getTicket(@PathVariable Long ticketId,
                                     @AuthenticationPrincipal AuthUserPrincipal principal) {
         return ticketService.getTicket(ticketId, principal);
+    }
+
+    @PutMapping("/{ticketId}")
+    public TicketResponse updateTicket(@PathVariable Long ticketId, @Valid @RequestBody CreateTicketRequest request,
+                                       @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.updateTicket(ticketId, request, principal);
+    }
+
+    @DeleteMapping("/{ticketId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTicket(@PathVariable Long ticketId, @Valid @RequestBody TicketDecisionRequest request,
+                             @AuthenticationPrincipal AuthUserPrincipal principal) {
+        ticketService.deleteTicket(ticketId, request, principal);
     }
 
     @PatchMapping("/{ticketId}/assign")

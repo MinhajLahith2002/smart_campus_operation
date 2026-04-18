@@ -87,7 +87,7 @@ export const AuthPage = () => {
   return (
     <div className="auth-page min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <Navbar fixed />
+        <Navbar fixed showThemeSwitcher />
 
         <section className="surface-strong auth-shell overflow-hidden">
           <div className="grid min-h-[calc(100svh-12rem)] lg:min-h-[640px] lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">

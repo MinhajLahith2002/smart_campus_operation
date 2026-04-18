@@ -1,4 +1,4 @@
-package com.smartcampus.modulec;
+package com.smartcampus.operationshub.auth.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.smartcampus.modulec.ModuleCBackendApplication;
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
@@ -49,9 +50,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-@SpringBootTest(properties = {
+@SpringBootTest(classes = ModuleCBackendApplication.class, properties = {
         "app.auth.bootstrap-admin.email=admin@campus.edu",
-        "app.auth.bootstrap-admin.password=Admin@123!"
+        "app.auth.bootstrap-admin.password=Admin@123!",
+        "spring.security.oauth2.client.registration.google.client-id=test-client",
+        "spring.security.oauth2.client.registration.google.client-secret=test-secret"
 })
 @AutoConfigureMockMvc
 class AuthControllerIntegrationTest {

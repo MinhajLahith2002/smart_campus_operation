@@ -21,6 +21,8 @@ import com.smartcampus.modulec.dto.TicketSummaryResponse;
 import com.smartcampus.modulec.dto.UpdateTicketStatusRequest;
 import com.smartcampus.operationshub.auth.repository.AuthUserRepository;
 import com.smartcampus.modulec.repository.TicketCommentRepository;
+import com.smartcampus.operationshub.notifications.domain.NotificationType;
+import com.smartcampus.operationshub.notifications.service.NotificationService;
 import com.smartcampus.modulec.repository.TicketRepository;
 import com.smartcampus.operationshub.auth.security.AuthUserPrincipal;
 import jakarta.persistence.EntityNotFoundException;
@@ -45,13 +47,16 @@ public class TicketService {
 
     private final TicketRepository ticketRepository;
     private final TicketCommentRepository ticketCommentRepository;
+    private final NotificationService notificationService;
     private final AuthUserRepository authUserRepository;
 
     public TicketService(TicketRepository ticketRepository,
                          TicketCommentRepository ticketCommentRepository,
+                         NotificationService notificationService,
                          AuthUserRepository authUserRepository) {
         this.ticketRepository = ticketRepository;
         this.ticketCommentRepository = ticketCommentRepository;
+        this.notificationService = notificationService;
         this.authUserRepository = authUserRepository;
     }
 
@@ -719,6 +724,7 @@ public class TicketService {
         return isBlank(value) ? null : value.trim();
     }
 }
+
 
 
 
