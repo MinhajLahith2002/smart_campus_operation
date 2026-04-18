@@ -3,6 +3,8 @@ package com.smartcampus.modulec.controller;
 import com.smartcampus.operationshub.auth.domain.UserRole;
 import com.smartcampus.modulec.dto.AssignTechnicianRequest;
 import com.smartcampus.modulec.dto.CreateTicketRequest;
+import com.smartcampus.modulec.dto.DuplicateTicketCheckRequest;
+import com.smartcampus.modulec.dto.DuplicateTicketMatchResponse;
 import com.smartcampus.modulec.dto.TicketCommentRequest;
 import com.smartcampus.modulec.dto.TicketCommentResponse;
 import com.smartcampus.modulec.dto.TicketDecisionRequest;
@@ -126,5 +128,11 @@ public class TicketController {
     @GetMapping("/summary")
     public TicketSummaryResponse getSummary() {
         return ticketService.getSummary();
+    }
+
+    @PostMapping("/duplicate-check")
+    public List<DuplicateTicketMatchResponse> checkDuplicates(@Valid @RequestBody DuplicateTicketCheckRequest request,
+                                                              @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return ticketService.findPossibleDuplicates(request, principal);
     }
 }

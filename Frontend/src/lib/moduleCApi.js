@@ -61,6 +61,7 @@ export const getTicket = async (ticketId, { role, userId } = {}) => {
 };
 export const getTicketSummary = async () => jsonRequest(`${MODULE_C_API_BASE}/summary`);
 export const createTicket = async (payload) => jsonRequest(MODULE_C_API_BASE, { method: 'POST', body: JSON.stringify(payload) });
+export const checkDuplicateTickets = async (payload) => jsonRequest(`${MODULE_C_API_BASE}/duplicate-check`, { method: 'POST', body: JSON.stringify(payload) });
 export const updateTicket = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}`, { method: 'PUT', body: JSON.stringify(payload) });
 export const deleteTicket = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}`, { method: 'DELETE', body: JSON.stringify(payload) });
 export const assignTechnician = async (ticketId, payload) => jsonRequest(`${MODULE_C_API_BASE}/${ticketId}/assign`, { method: 'PATCH', body: JSON.stringify(payload) });
