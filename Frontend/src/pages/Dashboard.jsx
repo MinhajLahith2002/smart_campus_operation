@@ -96,7 +96,7 @@ export const Dashboard = () => {
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">{heroCopy}</p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              {hasBookingAccess ? <Link to={isAdmin ? bookingRoute : '/catalogue'}><Button className="gap-2"><Plus size={18} /> {isAdmin ? 'Open booking desk' : 'New booking'}</Button></Link> : <Link to="/catalogue"><Button className="gap-2"><Search size={18} /> View assets</Button></Link>}
+              {hasBookingAccess && <Link to={isAdmin ? bookingRoute : '/catalogue'}><Button className="gap-2"><Plus size={18} /> {isAdmin ? 'Open booking desk' : 'New booking'}</Button></Link>}
               <Link to={isAdmin || isTechnician ? roleTicketRoute : '/tickets/new'}><Button variant="outline" className="gap-2"><Wrench size={18} /> {isAdmin ? 'Open incident desk' : isTechnician ? 'Open assigned queue' : 'Report issue'}</Button></Link>
               <Link to="/notifications"><Button variant="ghost" className="gap-2"><Bell size={18} /> Review signals</Button></Link>
             </div>
@@ -186,8 +186,7 @@ export const Dashboard = () => {
           <div className="premium-card overflow-hidden bg-slate-950 p-5 text-white">
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Quick actions</p>
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <QuickAction icon={<Search size={18} />} label="Find lab" to="/catalogue" />
-              <QuickAction icon={<Calendar size={18} />} label={hasBookingAccess ? (isAdmin ? 'Desk' : 'Book room') : 'Assets'} to={hasBookingAccess ? bookingRoute : '/catalogue'} />
+              {hasBookingAccess && <QuickAction icon={<Calendar size={18} />} label={isAdmin ? 'Desk' : 'Book room'} to={bookingRoute} />}
               <QuickAction icon={<Ticket size={18} />} label={isAdmin ? 'Desk' : isTechnician ? 'My work' : 'Open ticket'} to={isAdmin || isTechnician ? roleTicketRoute : '/tickets/new'} />
               <QuickAction icon={<Bell size={18} />} label="Signals" to="/notifications" />
             </div>

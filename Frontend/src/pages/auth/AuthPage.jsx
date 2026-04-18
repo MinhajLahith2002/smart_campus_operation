@@ -4,16 +4,13 @@ import {
   ArrowRight,
   Building2,
   Chrome,
-  Moon,
   ShieldCheck,
-  Sun,
   UserCog,
   Wrench,
 } from 'lucide-react';
 import { Badge, Button, Card, Input } from '../../components/ui/Primitives';
 import { Navbar } from '../../components/Navbar';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 import { getAuthConfig, GOOGLE_LOGIN_URL } from '../../lib/authApi';
 import { getRoleCredentials } from '../../lib/authDefaults';
 import { validateLogin } from '../../lib/authValidation';
@@ -23,7 +20,7 @@ const accessModes = [
   {
     key: 'student',
     role: 'USER',
-    title: 'Student / Staff',
+    title: 'Student',
     icon: Building2,
     badge: 'Student onboarding',
     copy: 'Students can create one account through local registration or Google onboarding. Each student account keeps a single sign-in method instead of linking both.',
@@ -58,7 +55,6 @@ export const AuthPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticating } = useAuth();
-  const { theme, setTheme } = useTheme();
   const [selectedRole, setSelectedRole] = useState(accessModes[0].key);
   const [form, setForm] = useState(getModeCredentials(accessModes[0]));
   const [touched, setTouched] = useState({});
@@ -128,7 +124,7 @@ export const AuthPage = () => {
   return (
     <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <Navbar fixed />
+        <Navbar fixed showThemeSwitcher />
 
         <div className="glass-panel mb-8 flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -138,7 +134,6 @@ export const AuthPage = () => {
               Local sign-in uses email and password, Google onboarding is student-only, and the backend decides the account role and status for every session.
             </p>
           </div>
-          <ThemePanel theme={theme} onChange={setTheme} />
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
@@ -182,9 +177,6 @@ export const AuthPage = () => {
                         </div>
                         <h3 className="mt-4 text-xl font-semibold">{mode.title}</h3>
                         <p className="mt-2 text-sm leading-7 text-muted-foreground">{mode.copy}</p>
-                        <p className="mt-4 text-sm font-semibold text-primary">
-                          Click to auto-fill this role in the sign-in form.
-                        </p>
                       </div>
                     </div>
                   </button>
@@ -269,12 +261,6 @@ export const AuthPage = () => {
                 <Chrome size={16} />
               </Button>
 
-              {!googleEnabled && (
-                <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                  Add <span className="font-semibold text-foreground">GOOGLE_CLIENT_ID</span> and <span className="font-semibold text-foreground">GOOGLE_CLIENT_SECRET</span> to <span className="font-semibold text-foreground">Backend/.env</span>, then restart Spring Boot to enable Google student onboarding.
-                </p>
-              )}
-
               {googleEnabled && (
                 <p className="mt-3 text-sm text-muted-foreground">
                   Use Google only for student accounts created through Google onboarding. Admin and technician access stays local-only.
@@ -291,53 +277,9 @@ export const AuthPage = () => {
                 </Link>
               </div>
             </Card>
-
           </section>
         </div>
       </div>
-    </div>
-  );
-};
-
-const ThemePanel = ({ theme, onChange }) => {
-  const options = [
-    { value: 'light', label: 'Light', icon: Sun },
-    { value: 'dark', label: 'Dark', icon: Moon },
-    { value: 'system', label: 'System', icon: ShieldCheck },
-  ];
-
-  return (
-    <div className="min-w-full rounded-[28px] border border-border bg-white/70 p-3 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur-sm dark:bg-white/5 md:min-w-[320px]">
-      <p className="px-2 text-[11px] font-bold uppercase tracking-[0.28em] text-muted-foreground">Appearance</p>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {options.map((option) => {
-          const Icon = option.icon;
-          const selected = theme === option.value;
-
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              className={cn(
-                'flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-3xl border px-3 py-4 text-sm font-semibold transition-all duration-200',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35',
-                selected
-                  ? 'border-primary bg-primary text-white shadow-[0_18px_32px_rgba(15,118,110,0.2)]'
-                  : 'border-border bg-background/80 text-foreground hover:border-primary/35 hover:bg-primary/5'
-              )}
-              aria-pressed={selected}
-              aria-label={`Use ${option.label.toLowerCase()} theme`}
-            >
-              <Icon size={18} />
-              <span>{option.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-3 px-2 text-xs leading-6 text-muted-foreground">
-        Choose the campus workspace mood before signing in.
-      </p>
     </div>
   );
 };
@@ -350,3 +292,4 @@ const GoogleMark = () => (
     <path fill="#34A853" d="M9 16.875c2.16 0 3.973-.71 5.297-1.927l-3.222-2.497c-.895.6-2.04.95-3.075.95A4.5 4.5 0 0 1 4.31 10.19l-3.302 2.56A7.875 7.875 0 0 0 9 16.875z" />
   </svg>
 );
+

@@ -73,6 +73,7 @@ export const AppShell = ({ children }) => {
   const [latestTechnicianAlert, setLatestTechnicianAlert] = React.useState(null);
   const seenNotificationIdsRef = React.useRef(new Set());
   const technicianAlertBootstrappedRef = React.useRef(false);
+  const displayName = user?.name || user?.email?.split('@')?.[0] || 'Campus User';
 
   React.useEffect(() => {
     if (!user || user.role !== 'TECHNICIAN') {
@@ -139,36 +140,44 @@ export const AppShell = ({ children }) => {
     return () => window.clearInterval(intervalId);
   }, [user]);
 
-  const ticketItem = user?.role === 'ADMIN'
-    ? { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Triage and assignment' }
+  const overviewItem = { to: '/dashboard', icon: LayoutDashboard, label: 'Overview', hint: 'Campus pulse' };
+  const catalogueItem = { to: '/catalogue', icon: Search, label: 'Catalogue', hint: 'Find spaces and assets' };
+  const signalsItem = { to: '/notifications', icon: Bell, label: 'Signals', hint: 'Alerts and activity' };
+  const settingsItem = { to: '/settings', icon: Settings, label: 'Settings', hint: 'Preferences and theme' };
+
+  const userPrimaryItems = [
+    overviewItem,
+    catalogueItem,
+    { to: '/bookings/my', icon: CalendarRange, label: 'My Bookings', hint: 'Reservations and requests' },
+    { to: '/tickets/my', icon: Ticket, label: 'My Tickets', hint: 'Report and track repairs' },
+    signalsItem,
+  ];
+
+  const technicianPrimaryItems = [
+    overviewItem,
+    { to: '/tickets/assigned', icon: Wrench, label: 'Assigned Work', hint: 'Technician queue' },
+    signalsItem,
+  ];
+
+  const adminPrimaryItems = [
+    overviewItem,
+    { to: '/admin/resources', icon: Building2, label: 'Resource Desk', hint: 'Facilities and assets' },
+    { to: '/admin/bookings', icon: CalendarRange, label: 'Booking Desk', hint: 'Approve and monitor requests' },
+    { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Triage and assignment' },
+    { to: '/admin/users', icon: UserCog, label: 'User Access', hint: 'Roles, status, invites' },
+  ];
+
+  const supportItems = user?.role === 'ADMIN' ? [signalsItem] : [];
+
+  const primaryItems = user?.role === 'ADMIN'
+    ? adminPrimaryItems
     : user?.role === 'TECHNICIAN'
-      ? { to: '/tickets/assigned', icon: Wrench, label: 'Assigned Work', hint: 'Technician queue' }
-      : { to: '/tickets/my', icon: Ticket, label: 'My Tickets', hint: 'Report and track repairs' };
+      ? technicianPrimaryItems
+      : userPrimaryItems;
 
-  const bookingItem = user?.role === 'ADMIN'
-    ? { to: '/admin/bookings', icon: CalendarRange, label: 'Booking Desk', hint: 'Approve or reject requests' }
-    : user?.role === 'USER'
-      ? { to: '/bookings/my', icon: CalendarRange, label: 'My Bookings', hint: 'Reservations and requests' }
-      : null;
-
-  const navItems = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Overview', hint: 'Campus pulse' },
-    { to: '/catalogue', icon: Search, label: 'Catalogue', hint: 'Find spaces and assets' },
-    bookingItem,
-    ticketItem,
-    { to: '/notifications', icon: Bell, label: 'Signals', hint: 'Alerts and activity' },
-  ].filter(Boolean);
-
-  const adminItems = user?.role === 'ADMIN'
-    ? [
-        { to: '/admin/resources', icon: Building2, label: 'Resource Desk', hint: 'Facilities and assets' },
-        { to: '/admin/bookings', icon: ShieldCheck, label: 'Booking Desk', hint: 'Operational queue' },
-        { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Assign and triage' },
-        { to: '/admin/users', icon: UserCog, label: 'User Access', hint: 'Roles, status, invites' },
-      ]
-    : [];
-
-  const allItems = [...navItems, ...adminItems, { to: '/settings', icon: Settings, label: 'Settings', hint: 'Preferences and theme' }];
+  const allItems = [...primaryItems, ...supportItems, settingsItem];
+  const primaryHeading = user?.role === 'ADMIN' ? 'Operations Desk' : 'Mission Control';
+  const supportHeading = 'Signals';
 
   return (
     <div className="min-h-screen md:flex">
@@ -202,7 +211,7 @@ export const AppShell = ({ children }) => {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Role-aware workspace online</p>
-                  <p className="text-xs text-slate-300">{user?.role === 'ADMIN' ? 'Triage controls enabled' : user?.role === 'TECHNICIAN' ? 'Assigned work queue active' : 'Reporter ticket tracking active'}</p>
+                  <p className="text-xs text-slate-300">{user?.role === 'ADMIN' ? 'Admin control desk active' : user?.role === 'TECHNICIAN' ? 'Assigned work queue active' : 'Reporter ticket tracking active'}</p>
                 </div>
               </div>
             )}
@@ -220,16 +229,16 @@ export const AppShell = ({ children }) => {
 
         <nav className="flex-1 overflow-y-auto px-4 py-5">
           <div className="space-y-2">
-            {!collapsed && <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">Mission Control</p>}
-            {navItems.map((item) => (
+            {!collapsed && <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{primaryHeading}</p>}
+            {primaryItems.map((item) => (
               <SidebarItem key={item.to} item={item} collapsed={collapsed} active={isActivePath(location.pathname, item.to)} />
             ))}
           </div>
 
-          {!!adminItems.length && (
+          {!!supportItems.length && (
             <div className="mt-8 space-y-2">
-              {!collapsed && <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">Operations Desk</p>}
-              {adminItems.map((item) => (
+              {!collapsed && <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{supportHeading}</p>}
+              {supportItems.map((item) => (
                 <SidebarItem key={item.to} item={item} collapsed={collapsed} active={isActivePath(location.pathname, item.to)} />
               ))}
             </div>
@@ -238,7 +247,7 @@ export const AppShell = ({ children }) => {
 
         <div className="border-t border-border p-4">
           <div className="space-y-2">
-            <SidebarItem item={allItems[allItems.length - 1]} collapsed={collapsed} active={isActivePath(location.pathname, '/settings')} />
+            <SidebarItem item={settingsItem} collapsed={collapsed} active={isActivePath(location.pathname, '/settings')} />
             <button
               onClick={logout}
               className={cn(
@@ -287,13 +296,13 @@ export const AppShell = ({ children }) => {
               </div>
 
               <div className="space-y-2">
-                {navItems.map((item) => (
+                {primaryItems.map((item) => (
                   <SidebarItem key={item.to} item={item} collapsed={false} active={isActivePath(location.pathname, item.to)} />
                 ))}
-                {!!adminItems.length && (
+                {!!supportItems.length && (
                   <>
-                    <p className="px-2 pt-4 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">Operations Desk</p>
-                    {adminItems.map((item) => (
+                    <p className="px-2 pt-4 text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">{supportHeading}</p>
+                    {supportItems.map((item) => (
                       <SidebarItem key={item.to} item={item} collapsed={false} active={isActivePath(location.pathname, item.to)} />
                     ))}
                   </>
@@ -328,7 +337,7 @@ export const AppShell = ({ children }) => {
 
               <div className="glass-panel flex items-center gap-3 px-3 py-2">
                 <div className="hidden text-right sm:block">
-                  <p className="text-sm font-semibold">{user?.name}</p>
+                  <p className="text-sm font-semibold">{displayName}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{user?.email}</p>
                 </div>
                 <img src={user?.avatar} alt="Avatar" className="h-10 w-10 rounded-2xl border border-border bg-muted/80" />
@@ -353,3 +362,6 @@ export const AppShell = ({ children }) => {
     </div>
   );
 };
+
+
+
