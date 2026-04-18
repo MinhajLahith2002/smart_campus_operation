@@ -2,8 +2,10 @@ package com.smartcampus.modulec;
 
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -16,6 +18,7 @@ import com.smartcampus.modulec.domain.AccountStatus;
 import com.smartcampus.modulec.domain.AuthProviderType;
 import com.smartcampus.modulec.domain.AuthUser;
 import com.smartcampus.modulec.domain.PasswordResetToken;
+import com.smartcampus.modulec.domain.TechnicianInvite;
 import com.smartcampus.modulec.domain.UserRole;
 import com.smartcampus.modulec.repository.AuthUserRepository;
 import com.smartcampus.modulec.repository.EmailVerificationTokenRepository;
@@ -83,6 +86,14 @@ class AuthControllerIntegrationTest {
         authUserRepository.findAll().stream()
                 .filter(user -> !"admin@campus.edu".equalsIgnoreCase(user.getEmail()))
                 .forEach(authUserRepository::delete);
+        authUserRepository.findByEmail("admin@campus.edu").ifPresent(admin -> {
+            admin.setPasswordHash(passwordEncoder.encode("Admin@123!"));
+            admin.setRole(UserRole.ADMIN);
+            admin.setStatus(AccountStatus.ACTIVE);
+            admin.setAuthProviderType(AuthProviderType.LOCAL);
+            admin.setEmailVerified(true);
+            authUserRepository.save(admin);
+        });
         doNothing().when(authMailService).sendVerificationEmail(any(), any());
         doNothing().when(authMailService).sendPasswordResetEmail(any(), any());
         doNothing().when(authMailService).sendUserInviteEmail(any(), any());
@@ -538,6 +549,88 @@ class AuthControllerIntegrationTest {
                                 """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message", is("This account is currently disabled.")));
+    }
+
+    @Test
+    void adminCanResendPendingInviteAndPersistFreshTokenExpiry() throws Exception {
+        MockHttpSession adminSession = loginAndGetSession("admin@campus.edu", "Admin@123!");
+
+        mockMvc.perform(post("/api/auth/admin/invites")
+                        .session(adminSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName":"Resend Target",
+                                  "email":"resend.target@campus.edu",
+                                  "role":"TECHNICIAN"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("resend.target@campus.edu")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        TechnicianInvite createdInvite = technicianInviteRepository.findTopByEmailOrderByCreatedAtDesc("resend.target@campus.edu")
+                .orElseThrow();
+        String originalTokenHash = createdInvite.getTokenHash();
+        OffsetDateTime originalExpiry = createdInvite.getExpiresAt();
+
+        clearInvocations(authMailService);
+
+        mockMvc.perform(post("/api/auth/admin/invites/{inviteId}/resend", createdInvite.getId())
+                        .session(adminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("resend.target@campus.edu")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        TechnicianInvite resentInvite = technicianInviteRepository.findById(createdInvite.getId())
+                .orElseThrow();
+
+        verify(authMailService, times(1)).sendUserInviteEmail(any(), any());
+        org.junit.jupiter.api.Assertions.assertNotEquals(originalTokenHash, resentInvite.getTokenHash());
+        org.junit.jupiter.api.Assertions.assertTrue(resentInvite.getExpiresAt().isAfter(originalExpiry));
+        org.junit.jupiter.api.Assertions.assertNull(resentInvite.getRevokedAt());
+        org.junit.jupiter.api.Assertions.assertNull(resentInvite.getAcceptedAt());
+    }
+
+    @Test
+    void adminCanRevokePendingInviteAndDisableInvitedAccount() throws Exception {
+        MockHttpSession adminSession = loginAndGetSession("admin@campus.edu", "Admin@123!");
+
+        mockMvc.perform(post("/api/auth/admin/invites")
+                        .session(adminSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName":"Revoke Target",
+                                  "email":"revoke.target@campus.edu",
+                                  "role":"ADMIN"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("revoke.target@campus.edu")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        TechnicianInvite createdInvite = technicianInviteRepository.findTopByEmailOrderByCreatedAtDesc("revoke.target@campus.edu")
+                .orElseThrow();
+
+        mockMvc.perform(post("/api/auth/admin/invites/{inviteId}/revoke", createdInvite.getId())
+                        .session(adminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("revoke.target@campus.edu")))
+                .andExpect(jsonPath("$.status", is("REVOKED")));
+
+        TechnicianInvite revokedInvite = technicianInviteRepository.findById(createdInvite.getId())
+                .orElseThrow();
+        AuthUser revokedUser = authUserRepository.findByEmail("revoke.target@campus.edu")
+                .orElseThrow();
+
+        org.junit.jupiter.api.Assertions.assertNotNull(revokedInvite.getRevokedAt());
+        org.junit.jupiter.api.Assertions.assertEquals(AccountStatus.DISABLED, revokedUser.getStatus());
+
+        mockMvc.perform(get("/api/auth/admin/invites")
+                        .session(adminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.email=='revoke.target@campus.edu' && @.status=='REVOKED')]").exists());
     }
 
     @Test
