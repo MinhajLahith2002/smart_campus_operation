@@ -155,7 +155,6 @@ export const AppShell = ({ children }) => {
 
   const technicianPrimaryItems = [
     overviewItem,
-    catalogueItem,
     { to: '/tickets/assigned', icon: Wrench, label: 'Assigned Work', hint: 'Technician queue' },
     signalsItem,
   ];
@@ -168,7 +167,7 @@ export const AppShell = ({ children }) => {
     { to: '/admin/users', icon: UserCog, label: 'User Access', hint: 'Roles, status, invites' },
   ];
 
-  const supportItems = [signalsItem];
+  const supportItems = user?.role === 'ADMIN' ? [signalsItem] : [];
 
   const primaryItems = user?.role === 'ADMIN'
     ? adminPrimaryItems
@@ -178,7 +177,7 @@ export const AppShell = ({ children }) => {
 
   const allItems = [...primaryItems, ...supportItems, settingsItem];
   const primaryHeading = user?.role === 'ADMIN' ? 'Operations Desk' : 'Mission Control';
-  const supportHeading = user?.role === 'ADMIN' ? 'Signals' : 'Signals';
+  const supportHeading = 'Signals';
 
   return (
     <div className="min-h-screen md:flex">
