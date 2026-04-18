@@ -69,10 +69,12 @@ export const AppShell = ({ children }) => {
   const location = useLocation();
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const isAdmin = user?.role === 'ADMIN';
+  const isTechnician = user?.role === 'TECHNICIAN';
 
-  const ticketItem = user?.role === 'ADMIN'
-    ? { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Triage and assignment' }
-    : user?.role === 'TECHNICIAN'
+  const ticketItem = isAdmin
+    ? null
+    : isTechnician
       ? { to: '/tickets/assigned', icon: Wrench, label: 'Assigned Work', hint: 'Technician queue' }
       : { to: '/tickets/my', icon: Ticket, label: 'My Tickets', hint: 'Report and track repairs' };
 
@@ -80,16 +82,16 @@ export const AppShell = ({ children }) => {
     { to: '/dashboard', icon: LayoutDashboard, label: 'Overview', hint: 'Campus pulse' },
     { to: '/catalogue', icon: Search, label: 'Catalogue', hint: 'Find spaces and assets' },
     { to: '/bookings/my', icon: CalendarRange, label: 'Bookings', hint: 'Reservations and approvals' },
-    ticketItem,
+    ...(ticketItem ? [ticketItem] : []),
     { to: '/notifications', icon: Bell, label: 'Signals', hint: 'Alerts and activity' },
   ];
 
-  const adminItems = user?.role === 'ADMIN'
+  const adminItems = isAdmin
     ? [
         { to: '/admin/resources', icon: Building2, label: 'Resource Desk', hint: 'Facilities and assets' },
         { to: '/admin/bookings', icon: ShieldCheck, label: 'Booking Desk', hint: 'Operational queue' },
         { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Assign and triage' },
-      { to: '/admin/users', icon: UserCog, label: 'User Mangmet', hint: 'Roles, status, invites' },
+        { to: '/admin/users', icon: UserCog, label: 'User Management', hint: 'Roles, status, invites' },
       ]
     : [];
 

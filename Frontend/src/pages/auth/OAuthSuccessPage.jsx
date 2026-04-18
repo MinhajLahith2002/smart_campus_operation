@@ -39,13 +39,13 @@ export const OAuthSuccessPage = () => {
       <div className="mx-auto max-w-7xl">
         <Navbar fixed />
         <div className="mx-auto max-w-xl py-8">
-      <Card className="bg-[linear-gradient(180deg,var(--auth-surface-strong),var(--auth-surface))] p-8 text-center">
-        <h1 className="text-3xl font-semibold">Google sign-in failed</h1>
-        <p className="auth-copy mt-4 text-sm leading-7">{error}</p>
-        <div className="mt-8 flex justify-center">
-          <Button className="auth-primary-button rounded-full px-8 text-white" size="lg" onClick={() => navigate('/auth')}>Back to Sign In</Button>
-        </div>
-      </Card>
+          <Card className="bg-[linear-gradient(180deg,var(--auth-surface-strong),var(--auth-surface))] p-8 text-center">
+            <h1 className="text-3xl font-semibold">Google sign-in failed</h1>
+            <p className="auth-copy mt-4 text-sm leading-7">{error}</p>
+            <div className="mt-8 flex justify-center">
+              <Button className="auth-primary-button rounded-full px-8 text-white" size="lg" onClick={() => navigate('/auth')}>Back to Sign In</Button>
+            </div>
+          </Card>
         </div>
       </div>
     </div>
