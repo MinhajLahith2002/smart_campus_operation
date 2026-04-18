@@ -17,8 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Card, Button, Badge } from '../components/ui/Primitives';
-import { MOCK_BOOKINGS, MOCK_RESOURCES, MOCK_TICKETS } from '../mockData';
-import { getResources } from '../lib/moduleAApi';
+import { getBookingSummary, getBookings, getNotificationSummary, getResources, getResourceSummary } from '../lib/operationsApi';
 import { getTicketSummary, getTickets } from '../lib/moduleCApi';
 import { cn } from '../lib/utils';
 
@@ -26,70 +25,66 @@ export const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const isTechnician = user?.role === 'TECHNICIAN';
+  const hasBookingAccess = !isTechnician;
   const firstName = user?.name.split(' ')[0] ?? 'Operator';
   const [incidentSummary, setIncidentSummary] = useState(null);
   const [incidentTickets, setIncidentTickets] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [bookingSummary, setBookingSummary] = useState(null);
+  const [resourceSummary, setResourceSummary] = useState(null);
   const [resources, setResources] = useState([]);
+  const [notificationSummary, setNotificationSummary] = useState(null);
 
   useEffect(() => {
     let ignore = false;
-    const loadIncidentSnapshot = async () => {
+    const loadDashboard = async () => {
       try {
-        const [summaryData, ticketData] = await Promise.all([
+        const [ticketSummaryData, ticketData, bookingData, bookingSummaryData, resourceData, resourceSummaryData, notificationSummaryData] = await Promise.all([
           getTicketSummary(),
           getTickets({ role: user?.role, userId: user?.id, assignedToMe: isTechnician }),
+          hasBookingAccess ? getBookings({ role: isAdmin ? 'ADMIN' : user?.role, userId: isAdmin ? undefined : user?.id }) : Promise.resolve([]),
+          hasBookingAccess ? getBookingSummary() : Promise.resolve(null),
+          getResources(),
+          getResourceSummary(),
+          getNotificationSummary({ role: user?.role, userId: user?.id }),
         ]);
-        if (!ignore) {
-          setIncidentSummary(summaryData);
-          setIncidentTickets(ticketData.slice(0, 3));
-        }
+        if (ignore) return;
+        setIncidentSummary(ticketSummaryData);
+        setIncidentTickets(ticketData.slice(0, 3));
+        setBookings(bookingData.slice(0, 3));
+        setBookingSummary(bookingSummaryData);
+        setResources(resourceData);
+        setResourceSummary(resourceSummaryData);
+        setNotificationSummary(notificationSummaryData);
       } catch (_) {
-        if (!ignore) {
-          setIncidentSummary(null);
-          setIncidentTickets([]);
-        }
+        if (ignore) return;
+        setIncidentSummary(null);
+        setIncidentTickets([]);
       }
     };
-    if (user) loadIncidentSnapshot();
+    if (user) loadDashboard();
     return () => { ignore = true; };
-  }, [user, isTechnician]);
+  }, [user, isTechnician, isAdmin, hasBookingAccess]);
 
-  useEffect(() => {
-    let ignore = false;
-
-    const loadResources = async () => {
-      try {
-        const data = await getResources();
-        if (!ignore) setResources(data);
-      } catch (_) {
-        if (!ignore) setResources([]);
-      }
-    };
-
-    loadResources();
-    return () => { ignore = true; };
-  }, []);
-
-  const approvedBookings = MOCK_BOOKINGS.filter((booking) => booking.status === 'APPROVED').length;
-  const resourceSource = resources.length ? resources : MOCK_RESOURCES;
-  const resourceLookup = useMemo(
-    () => new Map(resourceSource.map((resource) => [String(resource.id), resource])),
-    [resourceSource]
-  );
-  const activeResources = resourceSource.filter((resource) => resource.status === 'ACTIVE').length;
-  const openTickets = incidentSummary?.open ?? MOCK_TICKETS.filter((ticket) => ticket.status !== 'CLOSED').length;
+  const bookingRoute = isAdmin ? '/admin/bookings' : '/bookings/my';
+  const bookingTitle = isAdmin ? 'Booking desk' : 'Upcoming bookings';
+  const approvedBookings = hasBookingAccess ? (bookingSummary?.approved ?? bookings.filter((booking) => booking.status === 'APPROVED').length) : 0;
+  const activeResources = resourceSummary?.activeResources ?? resources.filter((resource) => resource.status === 'ACTIVE').length;
+  const resourceCount = resourceSummary?.totalResources ?? resources.length;
+  const openTickets = incidentSummary?.open ?? incidentTickets.filter((ticket) => ticket.status !== 'CLOSED').length;
+  const unreadSignals = notificationSummary?.unread ?? 0;
   const roleTicketRoute = isAdmin ? '/admin/tickets' : isTechnician ? '/tickets/assigned' : '/tickets/my';
-  const incidentQueue = incidentTickets.length ? incidentTickets : MOCK_TICKETS;
+  const incidentQueue = incidentTickets;
   const heroTitle = isAdmin
     ? `Welcome back, ${firstName}. The incident desk has decisions waiting.`
     : isTechnician
       ? `Welcome back, ${firstName}. Your assigned maintenance queue is ready.`
       : `Welcome back, ${firstName}. Your campus requests and repair updates are in view.`;
   const heroCopy = isAdmin
-    ? 'Module C gives admins the triage and assignment workspace the handover expects, including deeper queue visibility and workflow control.'
+    ? 'Smart Campus Hub gives admins the triage and assignment workspace the handover expects, including deeper queue visibility and workflow control.'
     : isTechnician
-      ? 'Module C now exposes a technician-first route with assigned work, urgency ordering, and resolution flow rather than the admin desk.'
-      : 'Module C now keeps issue reporting, ticket tracking, and closure confirmation in the reporter-facing flow instead of sharing the admin workspace.';
+      ? 'Smart Campus Hub now exposes a technician-first route with assigned work, urgency ordering, and resolution flow rather than the admin desk.'
+      : 'Smart Campus Hub now keeps issue reporting, ticket tracking, and closure confirmation in the reporter-facing flow instead of sharing the admin workspace.';
 
   return (
     <div className="space-y-8">
@@ -101,7 +96,7 @@ export const Dashboard = () => {
             <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">{heroCopy}</p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link to="/catalogue"><Button className="gap-2"><Plus size={18} /> New booking</Button></Link>
+              {hasBookingAccess && <Link to={isAdmin ? bookingRoute : '/catalogue'}><Button className="gap-2"><Plus size={18} /> {isAdmin ? 'Open booking desk' : 'New booking'}</Button></Link>}
               <Link to={isAdmin || isTechnician ? roleTicketRoute : '/tickets/new'}><Button variant="outline" className="gap-2"><Wrench size={18} /> {isAdmin ? 'Open incident desk' : isTechnician ? 'Open assigned queue' : 'Report issue'}</Button></Link>
               <Link to="/notifications"><Button variant="ghost" className="gap-2"><Bell size={18} /> Review signals</Button></Link>
             </div>
@@ -118,44 +113,44 @@ export const Dashboard = () => {
             <div className="mt-6 grid grid-cols-2 gap-4">
               <SignalPanel label="Active bookings" value={`${approvedBookings}`} accent="text-emerald-300" />
               <SignalPanel label={isTechnician ? 'Assigned incidents' : 'Open incidents'} value={`${isTechnician ? incidentQueue.length : openTickets}`} accent="text-amber-300" />
-              <SignalPanel label="Assets online" value={`${activeResources}/${resourceSource.length}`} accent="text-cyan-300" />
-              <SignalPanel label="Priority alerts" value={`${incidentSummary?.highOrCritical ?? 1}`} accent="text-violet-300" />
+              <SignalPanel label="Assets online" value={`${activeResources}/${resourceCount || 0}`} accent="text-cyan-300" />
+              <SignalPanel label="Signals unread" value={`${unreadSignals}`} accent="text-violet-300" />
             </div>
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Bookings approved" value={`${approvedBookings}`} trend="2 approvals since yesterday" icon={<Calendar className="text-primary" />} />
+        <StatCard label="Bookings approved" value={`${approvedBookings}`} trend="Live booking desk summary" icon={<Calendar className="text-primary" />} />
         <StatCard label={isTechnician ? 'Assigned tickets' : 'Open tickets'} value={`${isTechnician ? incidentQueue.length : openTickets}`} trend={isAdmin ? 'Admin triage queue monitored' : isTechnician ? 'Technician work queue focused' : 'Reporter-visible progress tracking'} icon={<Ticket className="text-warning" />} />
-        <StatCard label="Signals unread" value={`${incidentSummary?.highOrCritical ?? 1}`} trend="Module C alerts kept visible" icon={<Bell className="text-secondary-accent" />} />
-        <StatCard label="Assets active" value={`${activeResources}`} trend="95% service availability" icon={<CheckCircle2 className="text-success" />} />
+        <StatCard label="Signals unread" value={`${unreadSignals}`} trend="Notification queue from backend" icon={<Bell className="text-secondary-accent" />} />
+        <StatCard label="Assets active" value={`${activeResources}`} trend="Live resource availability" icon={<CheckCircle2 className="text-success" />} />
       </section>
 
       <div className="grid gap-8 xl:grid-cols-[1.1fr_1.1fr_0.8fr]">
         <section className="space-y-4">
-          <SectionHeader title="Upcoming bookings" to="/bookings/my" />
+          <SectionHeader title={bookingTitle} to={bookingRoute} />
           <div className="space-y-3">
-            {MOCK_BOOKINGS.map((booking) => {
-              const resource = resourceLookup.get(String(booking.resourceId));
+            {bookings.map((booking) => {
+              const resource = resources.find((item) => item.id === booking.resourceId);
               return (
                 <Card key={booking.id} className="group bg-white/70 p-5 dark:bg-white/5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex gap-4">
                       <div className="h-14 w-14 overflow-hidden rounded-2xl bg-muted">
-                        <img src={resource?.imageUrl} alt={resource?.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                        {resource?.imageUrl ? <img src={resource.imageUrl} alt={resource?.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" /> : null}
                       </div>
                       <div>
-                        <h3 className="text-base font-semibold">{resource?.name}</h3>
+                        <h3 className="text-base font-semibold">{booking.resourceName}</h3>
                         <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><Calendar size={12} />{format(new Date(booking.date), 'MMM d, yyyy')}</span>
-                          <span className="flex items-center gap-1"><Clock size={12} />{booking.startTime} - {booking.endTime}</span>
-                          <span className="flex items-center gap-1"><MapPin size={12} />{resource?.location}</span>
+                          <span className="flex items-center gap-1"><Calendar size={12} />{format(new Date(booking.bookingDate), 'MMM d, yyyy')}</span>
+                          <span className="flex items-center gap-1"><Clock size={12} />{booking.startTime.slice(0, 5)} - {booking.endTime.slice(0, 5)}</span>
+                          <span className="flex items-center gap-1"><MapPin size={12} />{booking.resourceLocation}</span>
                         </div>
                         <p className="mt-3 text-sm text-muted-foreground">{booking.purpose}</p>
                       </div>
                     </div>
-                    <Badge variant={booking.status === 'APPROVED' ? 'success' : 'warning'}>{booking.status}</Badge>
+                    <Badge variant={booking.status === 'APPROVED' ? 'success' : booking.status === 'PENDING' ? 'warning' : booking.status === 'REJECTED' ? 'danger' : 'neutral'}>{booking.status}</Badge>
                   </div>
                 </Card>
               );
@@ -176,7 +171,7 @@ export const Dashboard = () => {
                     </div>
                     <p className="mt-4 text-base font-semibold">{ticket.title || ticket.description}</p>
                     <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><MapPin size={12} />{ticket.resourceLocation || ticket.location || 'Campus asset'}</span>
+                      <span className="flex items-center gap-1"><MapPin size={12} />{ticket.resourceLocation || 'Campus asset'}</span>
                       <span className="flex items-center gap-1"><Clock size={12} />Reported {format(new Date(ticket.createdAt), 'MMM d')}</span>
                     </div>
                   </div>
@@ -191,8 +186,7 @@ export const Dashboard = () => {
           <div className="premium-card overflow-hidden bg-slate-950 p-5 text-white">
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Quick actions</p>
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <QuickAction icon={<Search size={18} />} label="Find lab" to="/catalogue" />
-              <QuickAction icon={<Calendar size={18} />} label="Book room" to="/catalogue" />
+              {hasBookingAccess && <QuickAction icon={<Calendar size={18} />} label={isAdmin ? 'Desk' : 'Book room'} to={bookingRoute} />}
               <QuickAction icon={<Ticket size={18} />} label={isAdmin ? 'Desk' : isTechnician ? 'My work' : 'Open ticket'} to={isAdmin || isTechnician ? roleTicketRoute : '/tickets/new'} />
               <QuickAction icon={<Bell size={18} />} label="Signals" to="/notifications" />
             </div>
@@ -201,9 +195,9 @@ export const Dashboard = () => {
           <Card className="space-y-4 bg-white/70 p-5 dark:bg-white/5">
             <p className="text-sm font-semibold">System readiness</p>
             <StatusItem label="Network" status="Operational" type="success" />
-            <StatusItem label="Facilities" status="98% active" type="success" />
+            <StatusItem label="Facilities" status={`${activeResources}/${resourceCount || 0} active`} type="success" />
             <StatusItem label="Maintenance queue" status={`${incidentSummary?.total ?? incidentQueue.length} tracked`} type="warning" />
-            <StatusItem label="AV equipment" status={`${openTickets} open`} type="danger" />
+            <StatusItem label="Signals" status={`${unreadSignals} unread`} type={unreadSignals ? 'danger' : 'success'} />
           </Card>
 
           {isAdmin && (
@@ -267,3 +261,6 @@ const StatusItem = ({ label, status, type }) => (
     </div>
   </div>
 );
+
+
+

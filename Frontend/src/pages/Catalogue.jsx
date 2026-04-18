@@ -1,21 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Search, Filter, Users, MapPin, Info, ArrowRight, Clock3, Layers3 } from 'lucide-react';
+import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Link } from 'react-router-dom';
-import { Clock3, Filter, MapPin, Search, Users } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Button, Card, Input, Badge } from '../components/ui/Primitives';
 import { ResourceStatusBadge } from '../components/resources/ResourceStatusBadge';
 import {
+  getResources,
   RESOURCE_STATUSES,
   RESOURCE_TYPES,
   formatAvailabilityWindow,
   formatResourceType,
-  getResources,
 } from '../lib/moduleAApi';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 
 export const Catalogue = () => {
   const { user } = useAuth();
+  const canRequestBooking = user?.role === 'USER';
   const [filters, setFilters] = useState({
     search: '',
     type: 'ALL',
@@ -24,37 +25,41 @@ export const Catalogue = () => {
     location: '',
   });
   const [resources, setResources] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let ignore = false;
-
-    const loadResources = async () => {
+    const loadData = async () => {
       try {
         setLoading(true);
-        setError('');
-        const data = await getResources(filters);
-        if (!ignore) setResources(data);
+        const resourceData = await getResources(filters);
+        const summaryData = null;
+        if (!ignore) {
+          setResources(resourceData);
+          setSummary(summaryData);
+          setError('');
+        }
       } catch (err) {
-        if (!ignore) setError(err.message || 'Unable to load the facilities catalogue.');
+        if (!ignore) setError(err.message || 'Unable to load resource catalogue.');
       } finally {
         if (!ignore) setLoading(false);
       }
     };
 
-    const timeoutId = window.setTimeout(loadResources, 180);
+    const timeoutId = window.setTimeout(loadData, 180);
     return () => {
       ignore = true;
       window.clearTimeout(timeoutId);
     };
   }, [filters]);
 
-  const summary = useMemo(() => ({
-    total: resources.length,
-    active: resources.filter((resource) => resource.status === 'ACTIVE').length,
-    unavailable: resources.filter((resource) => resource.status === 'OUT_OF_SERVICE').length,
-  }), [resources]);
+  const liveSummary = useMemo(() => ({
+    total: summary?.totalResources ?? resources.length,
+    active: summary?.bookableResources ?? resources.filter((r) => r.status === 'ACTIVE').length,
+    unavailable: summary?.outOfServiceResources ?? resources.filter((r) => r.status === 'OUT_OF_SERVICE').length,
+  }), [resources, summary]);
 
   return (
     <div className="space-y-8">
@@ -76,9 +81,9 @@ export const Catalogue = () => {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <MetricCard label="Resources listed" value={`${summary.total}`} />
-            <MetricCard label="Ready to book" value={`${summary.active}`} />
-            <MetricCard label="Out of service" value={`${summary.unavailable}`} />
+            <MetricCard label="Resources listed" value={`${liveSummary.total}`} />
+            <MetricCard label="Ready to book" value={`${liveSummary.active}`} />
+            <MetricCard label="Out of service" value={`${liveSummary.unavailable}`} />
           </div>
         </div>
 
@@ -134,14 +139,14 @@ export const Catalogue = () => {
               key={resource.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.04 }}
+               transition={{ delay: index * 0.04 }}
             >
               <Card className="group flex h-full flex-col overflow-hidden p-0 bg-white/70 dark:bg-white/5">
                 <div className="relative h-52 overflow-hidden">
                   <img
                     src={resource.imageUrl || 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&q=80&w=800'}
                     alt={resource.name}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
                   <div className="absolute left-4 top-4">
                     <Badge variant="info">{formatResourceType(resource.type)}</Badge>
@@ -178,17 +183,19 @@ export const Catalogue = () => {
                   </div>
 
                   <div className="mt-6 flex items-center gap-3 border-t border-border pt-4">
-                    {resource.status === 'ACTIVE' ? (
+                    {canRequestBooking && resource.status === 'ACTIVE' ? (
                       <Link to={`/bookings/new?resourceId=${resource.id}`} className="flex-1">
-                        <Button className="w-full">Book now</Button>
+                        <Button className="w-full gap-2">Book Now <ArrowRight size={16} /></Button>
                       </Link>
                     ) : (
                       <div className="flex-1">
-                        <Button className="w-full" disabled>Book now</Button>
+                        <Button className="w-full" variant="outline" disabled>
+                          {canRequestBooking ? 'Maintenance mode' : 'Student access required'}
+                        </Button>
                       </div>
                     )}
                     <Link to={`/catalogue/${resource.id}`}>
-                      <Button variant="outline">Details</Button>
+                      <Button variant="outline" size="icon"><Info size={18} /></Button>
                     </Link>
                   </div>
                 </div>
@@ -230,3 +237,4 @@ const ResourceMeta = ({ icon, label, value }) => (
     <p className="mt-2 text-sm font-medium">{value}</p>
   </div>
 );
+
