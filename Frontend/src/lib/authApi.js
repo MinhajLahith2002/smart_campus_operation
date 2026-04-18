@@ -1,8 +1,9 @@
-const API_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://127.0.0.1:8081';
-const AUTH_BASE = `${API_BASE}/api/auth`;
+import { BACKEND_BASE_URL } from './backendConfig';
+
+const AUTH_BASE = `${BACKEND_BASE_URL}/api/auth`;
 const REQUEST_TIMEOUT_MS = 12000;
 
-export const GOOGLE_LOGIN_URL = `${API_BASE}/oauth2/authorization/google`;
+export const GOOGLE_LOGIN_URL = `${BACKEND_BASE_URL}/oauth2/authorization/google`;
 
 const withJson = async (response) => {
   let data = null;
@@ -97,4 +98,4 @@ export const createTechnicianInvite = async (payload) => createUserInvite({ ...p
 export const resendTechnicianInvite = resendUserInvite;
 export const revokeTechnicianInvite = revokeUserInvite;
 
-export { API_BASE };
+export { BACKEND_BASE_URL as API_BASE };

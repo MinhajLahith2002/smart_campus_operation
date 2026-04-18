@@ -1,5 +1,6 @@
 package com.smartcampus.modulec;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
@@ -7,10 +8,12 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -119,6 +122,24 @@ class AuthControllerIntegrationTest {
                         .param("requesterRole", "STUDENT")
                         .param("requesterId", student.getPublicId()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void authEndpointsExposeCorsHeadersForFrontendOrigin() throws Exception {
+        mockMvc.perform(get("/api/auth/config")
+                        .header("Origin", "http://localhost:3000"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+
+        mockMvc.perform(options("/api/auth/login")
+                        .header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"))
+                .andExpect(header().string("Access-Control-Allow-Methods", containsString("POST")));
     }
 
     @Test

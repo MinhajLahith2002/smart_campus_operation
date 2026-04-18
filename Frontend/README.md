@@ -17,13 +17,13 @@
 ### Windows PowerShell quick start
 ```powershell
 cd Frontend
-$env:VITE_BACKEND_BASE_URL="http://127.0.0.1:8081"
+$env:VITE_BACKEND_BASE_URL="http://localhost:8082"
 npm install
 npm run dev
 ```
 
 ## Frontend environment
-- `VITE_BACKEND_BASE_URL` defaults to `http://127.0.0.1:8081`
+- `VITE_BACKEND_BASE_URL` defaults to `http://localhost:8082`
 - `VITE_MODULE_C_API_URL` optionally overrides only the ticket API base
 
 The frontend now uses backend session auth with:

@@ -4,6 +4,8 @@ import com.smartcampus.operationshub.auth.security.GoogleOAuth2FailureHandler;
 import com.smartcampus.operationshub.auth.security.GoogleOAuth2SuccessHandler;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -25,6 +27,9 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.util.StringUtils;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
@@ -95,6 +100,29 @@ public class SecurityConfig {
     }
 
     @Bean
+    CorsConfigurationSource corsConfigurationSource(AuthProperties authProperties) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowCredentials(true);
+        configuration.setAllowedOriginPatterns(Stream.of(
+                        normalizeOrigin(authProperties.getFrontendBaseUrl()),
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
+                        "https://localhost:*",
+                        "https://127.0.0.1:*"
+                )
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList());
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("Location"));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
+    @Bean
     @ConditionalOnExpression("#{T(org.springframework.util.StringUtils).hasText('${AUTH_GOOGLE_CLIENT_ID:}') and T(org.springframework.util.StringUtils).hasText('${AUTH_GOOGLE_CLIENT_SECRET:}')}")
     ClientRegistrationRepository clientRegistrationRepository(@Value("${AUTH_GOOGLE_CLIENT_ID}") String clientId,
                                                               @Value("${AUTH_GOOGLE_CLIENT_SECRET}") String clientSecret,
@@ -114,5 +142,12 @@ public class SecurityConfig {
     @ConditionalOnExpression("#{T(org.springframework.util.StringUtils).hasText('${AUTH_GOOGLE_CLIENT_ID:}') and T(org.springframework.util.StringUtils).hasText('${AUTH_GOOGLE_CLIENT_SECRET:}')}")
     OAuth2AuthorizedClientService authorizedClientService(ClientRegistrationRepository clientRegistrationRepository) {
         return new InMemoryOAuth2AuthorizedClientService(clientRegistrationRepository);
+    }
+
+    private String normalizeOrigin(String origin) {
+        if (!StringUtils.hasText(origin)) {
+            return null;
+        }
+        return origin.replaceAll("/+$", "");
     }
 }
