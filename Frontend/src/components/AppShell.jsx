@@ -164,7 +164,7 @@ export const AppShell = ({ children }) => {
     { to: '/admin/resources', icon: Building2, label: 'Resource Desk', hint: 'Facilities and assets' },
     { to: '/admin/bookings', icon: CalendarRange, label: 'Booking Desk', hint: 'Approve and monitor requests' },
     { to: '/admin/tickets', icon: ShieldCheck, label: 'Incident Desk', hint: 'Triage and assignment' },
-    { to: '/admin/users', icon: UserCog, label: 'User Access', hint: 'Roles, status, invites' },
+    { to: '/admin/users', icon: UserCog, label: 'User Management', hint: 'Roles, status, invites' },
   ];
 
   const supportItems = user?.role === 'ADMIN' ? [signalsItem] : [];

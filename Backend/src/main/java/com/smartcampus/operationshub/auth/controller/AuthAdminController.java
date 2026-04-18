@@ -4,9 +4,9 @@ import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.UserRole;
 import com.smartcampus.operationshub.auth.dto.AuthUserResponse;
-import com.smartcampus.operationshub.auth.dto.CreateTechnicianInviteRequest;
-import com.smartcampus.operationshub.auth.dto.TechnicianInviteResponse;
+import com.smartcampus.operationshub.auth.dto.CreateUserInviteRequest;
 import com.smartcampus.operationshub.auth.dto.UpdateUserStatusRequest;
+import com.smartcampus.operationshub.auth.dto.UserInviteResponse;
 import com.smartcampus.operationshub.auth.security.AuthUserPrincipal;
 import com.smartcampus.operationshub.auth.service.AuthAdminService;
 import com.smartcampus.operationshub.auth.service.AuthService;
@@ -50,23 +50,23 @@ public class AuthAdminController {
     }
 
     @PostMapping("/invites")
-    public TechnicianInviteResponse inviteTechnician(@Valid @RequestBody CreateTechnicianInviteRequest request,
-                                                     @AuthenticationPrincipal AuthUserPrincipal principal) {
-        return authAdminService.createTechnicianInvite(request, principal);
+    public UserInviteResponse createInvite(@Valid @RequestBody CreateUserInviteRequest request,
+                                           @AuthenticationPrincipal AuthUserPrincipal principal) {
+        return authAdminService.createInvite(request, principal);
     }
 
     @GetMapping("/invites")
-    public List<TechnicianInviteResponse> getInvites() {
+    public List<UserInviteResponse> getInvites() {
         return authAdminService.getInvites();
     }
 
     @PostMapping("/invites/{inviteId}/resend")
-    public TechnicianInviteResponse resendInvite(@PathVariable Long inviteId) {
+    public UserInviteResponse resendInvite(@PathVariable Long inviteId) {
         return authAdminService.resendInvite(inviteId);
     }
 
     @PostMapping("/invites/{inviteId}/revoke")
-    public TechnicianInviteResponse revokeInvite(@PathVariable Long inviteId) {
+    public UserInviteResponse revokeInvite(@PathVariable Long inviteId) {
         return authAdminService.revokeInvite(inviteId);
     }
 }

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { AlertTriangle, ArrowRight, Clock3, MapPin, Paperclip, ShieldAlert, UserRoundCog, Wrench, X } from 'lucide-react';
-import { Card, Badge, Button, Input } from '../components/ui/Primitives';
+import { Card, Badge, Button, Input, NoticeBanner } from '../components/ui/Primitives';
 import { assignTechnician, getTicketSummary, getTickets, updateTicketStatus, toBackendRole } from '../lib/moduleCApi';
 import { formatTicketStatusLabel, statusBadgeVariant } from '../lib/moduleCLabels';
 import { getDemoUsers } from '../lib/operationsApi';
@@ -306,8 +306,18 @@ export const AdminTicketsPage = () => {
         </section>
       )}
 
-      {error && <Card className="border-danger/30 bg-danger/5 p-5 text-sm text-danger">{error}</Card>}
-      {actionError && <Card className="border-warning/30 bg-warning/5 p-5 text-sm text-warning">{actionError}</Card>}
+      <div className="space-y-3">
+        {error && (
+          <NoticeBanner variant="error" onDismiss={() => setError('')}>
+            {error}
+          </NoticeBanner>
+        )}
+        {actionError && (
+          <NoticeBanner variant="warning" onDismiss={() => setActionError('')}>
+            {actionError}
+          </NoticeBanner>
+        )}
+      </div>
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">

@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.smartcampus.modulec.ModuleCBackendApplication;
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
@@ -19,6 +20,7 @@ import com.smartcampus.operationshub.auth.repository.PasswordResetTokenRepositor
 import com.smartcampus.operationshub.auth.repository.TechnicianInviteRepository;
 import com.smartcampus.operationshub.auth.service.AuthMailService;
 import com.smartcampus.operationshub.auth.service.AuthService;
+import com.smartcampus.operationshub.auth.service.AuthThrottleService;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,9 +30,11 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-@SpringBootTest(properties = {
+@SpringBootTest(classes = ModuleCBackendApplication.class, properties = {
         "app.auth.bootstrap-admin.email=seed-admin@campus.edu",
-        "app.auth.bootstrap-admin.password=Admin@123!"
+        "app.auth.bootstrap-admin.password=Admin@123!",
+        "spring.security.oauth2.client.registration.google.client-id=test-client",
+        "spring.security.oauth2.client.registration.google.client-secret=test-secret"
 })
 class AuthServiceTest {
 
@@ -52,11 +56,15 @@ class AuthServiceTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private AuthThrottleService authThrottleService;
+
     @MockBean
     private AuthMailService authMailService;
 
     @BeforeEach
     void setUp() {
+        authThrottleService.clearAll();
         technicianInviteRepository.deleteAll();
         passwordResetTokenRepository.deleteAll();
         emailVerificationTokenRepository.deleteAll();
@@ -145,7 +153,7 @@ class AuthServiceTest {
         student.setGoogleId("google-reset");
         authUserRepository.save(student);
 
-        authService.requestPasswordReset(new ForgotPasswordRequest("google-only@campus.edu"));
+        authService.requestPasswordReset(new ForgotPasswordRequest("google-only@campus.edu"), "127.0.0.1");
 
         assertEquals(0, passwordResetTokenRepository.count());
         verify(authMailService, never()).sendPasswordResetEmail(any(), any());

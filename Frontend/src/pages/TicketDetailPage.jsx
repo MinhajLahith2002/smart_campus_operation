@@ -21,7 +21,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { Badge, Button, Card } from '../components/ui/Primitives';
+import { Badge, Button, Card, Input, NoticeBanner } from '../components/ui/Primitives';
 import { addComment, assignTechnician, closeTicket, deleteComment, deleteTicket, getTicket, reopenTicket, toBackendRole, updateComment, updateTicketStatus } from '../lib/moduleCApi';
 import { formatTicketStatusLabel, statusBadgeVariant } from '../lib/moduleCLabels';
 import { maintenanceHealth } from '../lib/moduleCInsights';
@@ -400,7 +400,7 @@ export const TicketDetailPage = () => {
                 <div key={activity.id} className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
                   <p className="font-semibold text-foreground">{activity.action.replace('_', ' ')}</p>
                   <p className="mt-1">{activity.detail}</p>
-                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} · {activity.actorRole}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} Â· {activity.actorRole}</p>
                 </div>
               ))}
             </div>
@@ -440,7 +440,7 @@ export const TicketDetailPage = () => {
                       <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${badgeClass}`}>{index + 1}</div>
                       <div>
                         <p className="text-sm font-semibold">{step.title}</p>
-                        <p className="text-xs text-muted-foreground">{step.owner} · {statusCopy}</p>
+                        <p className="text-xs text-muted-foreground">{step.owner} Â· {statusCopy}</p>
                       </div>
                     </div>
                   </div>

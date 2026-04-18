@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Button, Card, Input, Badge } from '../components/ui/Primitives';
+import { Button, Card, Input, Badge, NoticeBanner } from '../components/ui/Primitives';
 import {
   AlertTriangle,
   ArrowLeft,

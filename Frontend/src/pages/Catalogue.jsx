@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Filter, Users, MapPin, Info, ArrowRight, Clock3, Layers3 } from 'lucide-react';
-import { Card, Button, Input, Badge } from '../components/ui/Primitives';
+import { Card, Button, Input, Badge, NoticeBanner } from '../components/ui/Primitives';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ResourceStatusBadge } from '../components/resources/ResourceStatusBadge';
