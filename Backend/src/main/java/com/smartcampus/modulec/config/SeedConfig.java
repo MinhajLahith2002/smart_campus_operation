@@ -1,18 +1,13 @@
 package com.smartcampus.modulec.config;
 
-import com.smartcampus.modulec.domain.AvailabilityWindow;
-import com.smartcampus.modulec.domain.FacilityAsset;
-import com.smartcampus.modulec.domain.ResourceStatus;
-import com.smartcampus.modulec.domain.ResourceType;
 import com.smartcampus.modulec.domain.Ticket;
 import com.smartcampus.modulec.domain.TicketActivity;
 import com.smartcampus.modulec.domain.TicketCategory;
 import com.smartcampus.modulec.domain.TicketEvidence;
 import com.smartcampus.modulec.domain.TicketPriority;
 import com.smartcampus.modulec.domain.TicketStatus;
-import com.smartcampus.modulec.domain.UserRole;
-import com.smartcampus.modulec.repository.FacilityAssetRepository;
 import com.smartcampus.modulec.repository.TicketRepository;
+import com.smartcampus.operationshub.auth.domain.UserRole;
 import java.time.OffsetDateTime;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -21,10 +16,24 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SeedConfig {
 
+    private static final String MAIN_AUDITORIUM_LOCATION = "Building B, Floor 1";
+
     @Bean
-    CommandLineRunner seedModuleData(TicketRepository ticketRepository, FacilityAssetRepository facilityAssetRepository) {
+    CommandLineRunner seedModuleData(TicketRepository ticketRepository) {
         return args -> {
-            seedResources(facilityAssetRepository);
+            ticketRepository.findAll().stream()
+                    .filter(ticket -> "Main Auditorium".equals(ticket.getResourceName()))
+                    .forEach(ticket -> {
+                        if (!MAIN_AUDITORIUM_LOCATION.equals(ticket.getResourceLocation())) {
+                            ticket.setResourceLocation(MAIN_AUDITORIUM_LOCATION);
+                        }
+                        if (ticket.getIncidentLocation() == null
+                                || ticket.getIncidentLocation().isBlank()
+                                || "Building A, Floor 1".equals(ticket.getIncidentLocation())) {
+                            ticket.setIncidentLocation(MAIN_AUDITORIUM_LOCATION);
+                        }
+                        ticketRepository.save(ticket);
+                    });
 
             if (ticketRepository.count() > 0) {
                 return;
@@ -47,13 +56,13 @@ public class SeedConfig {
                     "Presentation sessions interrupted",
                     "Photo and short video captured during failure.",
                     "tech-17",
-                    "Nuwan Silva",
+                    "Kasun Silva",
                     "Lamp assembly diagnosed; replacement stock requested.");
             projector.getEvidenceItems().add(evidence(projector, "projector-front.jpg"));
             projector.getEvidenceItems().add(evidence(projector, "projector-lamp-video.mp4"));
             projector.getActivities().add(activity(projector, "Amaya Perera", UserRole.STUDENT, "TICKET_CREATED", "Issue reported with evidence references."));
-            projector.getActivities().add(activity(projector, "Operations Desk", UserRole.ADMIN, "TECHNICIAN_ASSIGNED", "Assigned to Nuwan Silva for equipment inspection."));
-            projector.getActivities().add(activity(projector, "Nuwan Silva", UserRole.TECHNICIAN, "STATUS_UPDATED", "Diagnosis started and temporary workaround failed."));
+            projector.getActivities().add(activity(projector, "Operations Desk", UserRole.ADMIN, "TECHNICIAN_ASSIGNED", "Assigned to Kasun Silva for equipment inspection."));
+            projector.getActivities().add(activity(projector, "Kasun Silva", UserRole.TECHNICIAN, "STATUS_UPDATED", "Diagnosis started and temporary workaround failed."));
 
             Ticket ac = buildTicket(
                     "AC instability in Robotics Lab",
@@ -88,7 +97,7 @@ public class SeedConfig {
                     "events@campus.edu",
                     UserRole.STAFF,
                     "Main Auditorium",
-                    "Building A, Floor 1",
+                    MAIN_AUDITORIUM_LOCATION,
                     "LECTURE_HALL",
                     "events@campus.edu",
                     "Large public events affected",
@@ -96,6 +105,7 @@ public class SeedConfig {
                     null,
                     null,
                     null);
+            network.setIncidentLocation(MAIN_AUDITORIUM_LOCATION);
             network.getEvidenceItems().add(evidence(network, "network-drop-log.txt"));
             network.getActivities().add(activity(network, "Campus Events Desk", UserRole.STAFF, "TICKET_CREATED", "High-impact event connectivity issue reported."));
             network.getActivities().add(activity(network, "Operations Desk", UserRole.ADMIN, "STATUS_UPDATED", "Ticket triaged as critical due to event impact."));
@@ -104,79 +114,6 @@ public class SeedConfig {
             ticketRepository.save(ac);
             ticketRepository.save(network);
         };
-    }
-
-    private void seedResources(FacilityAssetRepository facilityAssetRepository) {
-        if (facilityAssetRepository.count() > 0) {
-            return;
-        }
-
-        facilityAssetRepository.save(buildResource(
-                "Main Auditorium",
-                ResourceType.HALL,
-                500,
-                "Building A, Floor 1",
-                "Large auditorium with event-grade audio visual support for ceremonies, lectures, and campus showcases.",
-                "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&q=80&w=800",
-                ResourceStatus.ACTIVE,
-                availability("Monday,Tuesday,Wednesday,Thursday,Friday,Saturday", "08:00", "22:00", "AV support should be requested for large events.")
-        ));
-        facilityAssetRepository.save(buildResource(
-                "Advanced Robotics Lab",
-                ResourceType.LAB,
-                30,
-                "Science Wing, Room 302",
-                "Lab with robotics benches, high-spec workstations, and guided practical support for engineering cohorts.",
-                "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800",
-                ResourceStatus.ACTIVE,
-                availability("Monday,Tuesday,Wednesday,Thursday,Friday", "09:00", "18:00", "Department approval is required outside scheduled practicals.")
-        ));
-        facilityAssetRepository.save(buildResource(
-                "Collaborative Space 1",
-                ResourceType.MEETING_ROOM,
-                12,
-                "Library, Level 2",
-                "Small meeting room for presentations, group study, and project planning sessions.",
-                "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800",
-                ResourceStatus.ACTIVE,
-                availability("Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday", "07:00", "23:00", "Whiteboard and shared display are available in-room.")
-        ));
-        facilityAssetRepository.save(buildResource(
-                "4K Projector Unit B",
-                ResourceType.EQUIPMENT,
-                1,
-                "IT Helpdesk",
-                "Portable high-resolution projector for classroom delivery and event support.",
-                "https://images.unsplash.com/photo-1535016120720-40c646bebb3d?auto=format&fit=crop&q=80&w=800",
-                ResourceStatus.OUT_OF_SERVICE,
-                availability("Monday,Tuesday,Wednesday,Thursday,Friday", "08:00", "17:00", "Currently unavailable while the lamp assembly is replaced.")
-        ));
-    }
-
-    private FacilityAsset buildResource(String name, ResourceType type, int capacity, String location, String description,
-                                        String imageUrl, ResourceStatus status, AvailabilityWindow availabilityWindow) {
-        OffsetDateTime now = OffsetDateTime.now();
-        FacilityAsset resource = new FacilityAsset();
-        resource.setName(name);
-        resource.setType(type);
-        resource.setCapacity(capacity);
-        resource.setLocation(location);
-        resource.setDescription(description);
-        resource.setImageUrl(imageUrl);
-        resource.setStatus(status);
-        resource.setAvailabilityWindow(availabilityWindow);
-        resource.setCreatedAt(now.minusDays(2));
-        resource.setUpdatedAt(now);
-        return resource;
-    }
-
-    private AvailabilityWindow availability(String daysOfWeek, String openTime, String closeTime, String notes) {
-        AvailabilityWindow window = new AvailabilityWindow();
-        window.setDaysOfWeek(daysOfWeek);
-        window.setOpenTime(openTime);
-        window.setCloseTime(closeTime);
-        window.setNotes(notes);
-        return window;
     }
 
     private Ticket buildTicket(String title, String description, TicketCategory category, TicketPriority priority,
@@ -197,6 +134,7 @@ public class SeedConfig {
         ticket.setReporterRole(reporterRole);
         ticket.setResourceName(resourceName);
         ticket.setResourceLocation(resourceLocation);
+        ticket.setIncidentLocation(resourceLocation);
         ticket.setResourceType(resourceType);
         ticket.setPreferredContact(preferredContact);
         ticket.setOperationalImpact(operationalImpact);
