@@ -1,5 +1,6 @@
 package com.smartcampus.operationshub.config;
 
+import com.smartcampus.operationshub.auth.config.AuthProperties;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import org.springframework.context.annotation.Configuration;

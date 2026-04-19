@@ -2,6 +2,8 @@ package com.smartcampus.operationshub.auth.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -32,6 +34,10 @@ public class TechnicianInvite {
 
     @Column(nullable = false, length = 140)
     private String fullName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private UserRole invitedRole;
 
     @Column(nullable = false, length = 48)
     private String invitedByUserId;
@@ -94,6 +100,14 @@ public class TechnicianInvite {
 
     public void setFullName(String fullName) {
         this.fullName = fullName;
+    }
+
+    public UserRole getInvitedRole() {
+        return invitedRole == null ? UserRole.TECHNICIAN : invitedRole;
+    }
+
+    public void setInvitedRole(UserRole invitedRole) {
+        this.invitedRole = invitedRole;
     }
 
     public String getInvitedByUserId() {

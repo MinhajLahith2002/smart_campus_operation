@@ -4,8 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.smartcampus.operationshub.config.AuthBootstrapConfig;
-import com.smartcampus.operationshub.config.AuthProperties;
+import com.smartcampus.modulec.ModuleCBackendApplication;
+import com.smartcampus.operationshub.auth.config.AuthBootstrapConfig;
+import com.smartcampus.operationshub.auth.config.AuthProperties;
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.UserRole;
@@ -19,7 +20,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-@SpringBootTest
+@SpringBootTest(classes = ModuleCBackendApplication.class, properties = {
+        "spring.security.oauth2.client.registration.google.client-id=test-client",
+        "spring.security.oauth2.client.registration.google.client-secret=test-secret"
+})
 class AuthBootstrapConfigTest {
 
     @Autowired
@@ -74,7 +78,7 @@ class AuthBootstrapConfigTest {
         properties.getSampleUsers().getStudent().setEmail("student@campus.edu");
         properties.getSampleUsers().getStudent().setPassword("Student@123");
         properties.getSampleUsers().getStudent().setFullName("Sample Student");
-        properties.getSampleUsers().getStudent().setStudentId("IT20240001");
+        properties.getSampleUsers().getStudent().setStudentId("IT24240001");
         properties.getSampleUsers().getStudent().setFaculty("IT");
         properties.getSampleUsers().getStudent().setBatch("2024");
         properties.getSampleUsers().getStudent().setCampus("malabe");
@@ -94,7 +98,7 @@ class AuthBootstrapConfigTest {
         assertEquals(UserRole.STUDENT, student.getRole());
         assertEquals(AccountStatus.ACTIVE, student.getStatus());
         assertEquals(AuthProviderType.LOCAL, student.getAuthProviderType());
-        assertEquals("IT20240001", student.getStudentId());
+        assertEquals("IT24240001", student.getStudentId());
         assertEquals("IT", student.getFaculty());
         assertTrue(passwordEncoder.matches("Student@123", student.getPasswordHash()));
 

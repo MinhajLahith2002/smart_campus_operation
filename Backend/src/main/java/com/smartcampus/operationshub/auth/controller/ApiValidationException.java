@@ -1,4 +1,4 @@
-package com.smartcampus.operationshub.common;
+package com.smartcampus.operationshub.auth.controller;
 
 import java.util.Map;
 

@@ -13,9 +13,33 @@ export const CAMPUS_OPTIONS = [
 ];
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const fullNamePattern = /^[A-Za-z]+(?:[A-Za-z .'-]*[A-Za-z])?$/;
 const studentIdPattern = /^(IT|CS|BM|HM)\d{8}$/;
 const phonePattern = /^\+94 7\d{8}$/;
 const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+const adminSearchPattern = /^[A-Za-z0-9@._'\-\s]+$/;
+const getEncodedBatchYear = (studentId) => studentId.slice(2, 4);
+const getBatchYearSuffix = (batch) => batch.slice(-2);
+
+export const validateAdminUserSearch = (query) => {
+  const value = query.trim();
+  if (!value) return '';
+
+  const meaningfulCharacters = value.replace(/[\s@._'-]/g, '');
+  if (!meaningfulCharacters) {
+    return 'Enter a name, email, or student ID to search.';
+  }
+
+  if (!adminSearchPattern.test(value)) {
+    return 'Use letters, numbers, spaces, and email/student ID characters only.';
+  }
+
+  if (meaningfulCharacters.length < 2) {
+    return 'Enter 2 or more characters.';
+  }
+
+  return '';
+};
 
 export const validateLogin = (form) => {
   const errors = {};
@@ -27,6 +51,8 @@ export const validateLogin = (form) => {
 
   if (!form.password) {
     errors.password = 'Password is required.';
+  } else if (!passwordPattern.test(form.password)) {
+    errors.password = 'Use a strong password with uppercase, lowercase, number, and symbol.';
   }
 
   return errors;
@@ -39,6 +65,34 @@ export const validateForgotPassword = (form) => {
   } else if (!emailPattern.test(form.email.trim())) {
     errors.email = 'Enter a valid email address.';
   }
+  return errors;
+};
+
+export const validateUserInvite = (form) => {
+  const errors = {};
+  const fullName = form.fullName.trim().replace(/\s+/g, ' ');
+  const email = form.email.trim().toLowerCase();
+
+  if (!fullName) {
+    errors.fullName = 'Full name is required.';
+  } else if (fullName.length < 3) {
+    errors.fullName = 'Full name must be at least 3 characters.';
+  } else if (!fullNamePattern.test(fullName)) {
+    errors.fullName = 'Use letters, spaces, and standard name punctuation only.';
+  }
+
+  if (!email) {
+    errors.email = 'Email is required.';
+  } else if (!emailPattern.test(email)) {
+    errors.email = 'Enter a valid email address.';
+  }
+
+  if (!form.role) {
+    errors.role = 'Select an access role.';
+  } else if (!['TECHNICIAN', 'ADMIN'].includes(form.role)) {
+    errors.role = 'Select a valid access role.';
+  }
+
   return errors;
 };
 
@@ -95,7 +149,7 @@ export const validateRegistration = (form) => {
     errors.batch = 'Batch is required.';
   } else if (!/^\d{4}$/.test(batch)) {
     errors.batch = 'Batch must be a 4 digit year.';
-  } else if (studentId.length >= 6 && studentId.slice(2, 6) !== batch) {
+  } else if (studentIdPattern.test(studentId) && getEncodedBatchYear(studentId) !== getBatchYearSuffix(batch)) {
     errors.batch = 'Batch must match the year encoded in the student ID.';
   }
   if (!form.campus) {
@@ -151,7 +205,7 @@ export const validateGoogleOnboarding = (form) => {
     errors.batch = 'Batch is required.';
   } else if (!/^\d{4}$/.test(batch)) {
     errors.batch = 'Batch must be a 4 digit year.';
-  } else if (studentId.length >= 6 && studentId.slice(2, 6) !== batch) {
+  } else if (studentIdPattern.test(studentId) && getEncodedBatchYear(studentId) !== getBatchYearSuffix(batch)) {
     errors.batch = 'Batch must match the year encoded in the student ID.';
   }
   if (!form.campus) {

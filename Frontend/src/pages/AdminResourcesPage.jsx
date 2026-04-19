@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, MapPin, Pencil, Plus, Search, Trash2, Users, Wrench } from 'lucide-react';
-import { Button, Card, Input } from '../components/ui/Primitives';
+import { Button, Card, Input, NoticeBanner } from '../components/ui/Primitives';
 import { ResourceFormModal } from '../components/resources/ResourceFormModal';
 import { ResourceStatusBadge } from '../components/resources/ResourceStatusBadge';
 import {
@@ -167,8 +167,18 @@ export const AdminResourcesPage = () => {
         </div>
       </div>
 
-      {success && <Card className="border-success/20 bg-success/5 p-4 text-sm text-success">{success}</Card>}
-      {error && <Card className="border-danger/20 bg-danger/5 p-4 text-sm text-danger">{error}</Card>}
+      <div className="space-y-3">
+        {success && (
+          <NoticeBanner variant="success" onDismiss={() => setSuccess('')}>
+            {success}
+          </NoticeBanner>
+        )}
+        {error && (
+          <NoticeBanner variant="error" onDismiss={() => setError('')}>
+            {error}
+          </NoticeBanner>
+        )}
+      </div>
 
       {loading ? (
         <Card className="p-8 text-sm text-muted-foreground">Loading resources...</Card>

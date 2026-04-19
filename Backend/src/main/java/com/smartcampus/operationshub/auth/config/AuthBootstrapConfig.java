@@ -1,4 +1,4 @@
-package com.smartcampus.operationshub.config;
+package com.smartcampus.operationshub.auth.config;
 
 import com.smartcampus.operationshub.auth.repository.AuthUserRepository;
 import org.springframework.boot.CommandLineRunner;

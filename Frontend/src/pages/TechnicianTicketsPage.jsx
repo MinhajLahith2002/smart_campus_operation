@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { CheckCircle2, Clock3, MapPin, ShieldCheck, Wrench } from 'lucide-react';
-import { Badge, Button, Card } from '../components/ui/Primitives';
+import { Badge, Button, Card, NoticeBanner } from '../components/ui/Primitives';
 import { getTickets, toBackendRole, updateTicketStatus } from '../lib/moduleCApi';
 import { formatTicketStatusLabel, statusBadgeVariant } from '../lib/moduleCLabels';
 import { useAuth } from '../context/AuthContext';

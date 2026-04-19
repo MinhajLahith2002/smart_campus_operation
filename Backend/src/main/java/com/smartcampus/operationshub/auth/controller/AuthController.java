@@ -1,5 +1,6 @@
 package com.smartcampus.operationshub.auth.controller;
 
+import com.smartcampus.operationshub.auth.config.AuthProperties;
 import com.smartcampus.operationshub.auth.dto.AuthConfigResponse;
 import com.smartcampus.operationshub.auth.dto.AuthMessageResponse;
 import com.smartcampus.operationshub.auth.dto.AuthResponse;
@@ -16,7 +17,7 @@ import com.smartcampus.operationshub.auth.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
@@ -34,26 +35,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
-    private final Environment environment;
+    private final AuthProperties authProperties;
 
-    public AuthController(AuthService authService, Environment environment) {
+    @Value("${AUTH_GOOGLE_CLIENT_ID:}")
+    private String googleClientId;
+
+    public AuthController(AuthService authService, AuthProperties authProperties) {
         this.authService = authService;
-        this.environment = environment;
+        this.authProperties = authProperties;
     }
 
     @GetMapping("/config")
     public AuthConfigResponse getConfig() {
-        String googleClientId = firstProperty(
-                "SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID",
-                "GOOGLE_CLIENT_ID",
-                "spring.security.oauth2.client.registration.google.client-id"
+        return new AuthConfigResponse(
+                StringUtils.hasText(googleClientId),
+                Math.max(1, (int) authProperties.getForgotPasswordCooldownSeconds())
         );
-        String googleClientSecret = firstProperty(
-                "SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET",
-                "GOOGLE_CLIENT_SECRET",
-                "spring.security.oauth2.client.registration.google.client-secret"
-        );
-        return new AuthConfigResponse(StringUtils.hasText(googleClientId) && StringUtils.hasText(googleClientSecret));
     }
 
     @PostMapping("/login")
@@ -75,8 +72,8 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public AuthMessageResponse forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        authService.requestPasswordReset(request);
+    public AuthMessageResponse forgotPassword(@Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest httpRequest) {
+        authService.requestPasswordReset(request, resolveClientAddress(httpRequest));
         return new AuthMessageResponse("If an account exists for that email, a password reset link has been sent.");
     }
 
@@ -113,16 +110,14 @@ public class AuthController {
     public AuthResponse acceptInvite(@Valid @RequestBody InviteAcceptanceRequest request,
                                      HttpServletRequest httpRequest,
                                      HttpServletResponse httpResponse) {
-        return authService.acceptTechnicianInvite(request, httpRequest, httpResponse);
+        return authService.acceptInvite(request, httpRequest, httpResponse);
     }
 
-    private String firstProperty(String... keys) {
-        for (String key : keys) {
-            String value = environment.getProperty(key);
-            if (StringUtils.hasText(value)) {
-                return value;
-            }
+    private String resolveClientAddress(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (StringUtils.hasText(forwarded)) {
+            return forwarded.split(",")[0].trim();
         }
-        return null;
+        return request.getRemoteAddr();
     }
 }

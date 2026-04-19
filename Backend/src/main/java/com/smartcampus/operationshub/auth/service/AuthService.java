@@ -1,8 +1,13 @@
 package com.smartcampus.operationshub.auth.service;
 
+<<<<<<< HEAD
 import com.smartcampus.operationshub.config.AuthProperties;
 import com.smartcampus.operationshub.config.AuthBootstrapSupport;
 import com.smartcampus.operationshub.common.ApiValidationException;
+=======
+import com.smartcampus.operationshub.auth.controller.ApiValidationException;
+import com.smartcampus.operationshub.auth.config.AuthProperties;
+>>>>>>> origin/main
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
@@ -76,6 +81,7 @@ public class AuthService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final TechnicianInviteRepository technicianInviteRepository;
+    private final AuthThrottleService authThrottleService;
     private final AuthMailService authMailService;
     private final PasswordEncoder passwordEncoder;
     private final AuthProperties authProperties;
@@ -86,6 +92,7 @@ public class AuthService {
                        PasswordResetTokenRepository passwordResetTokenRepository,
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
                        TechnicianInviteRepository technicianInviteRepository,
+                       AuthThrottleService authThrottleService,
                        AuthMailService authMailService,
                        PasswordEncoder passwordEncoder,
                        AuthProperties authProperties) {
@@ -93,6 +100,7 @@ public class AuthService {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.technicianInviteRepository = technicianInviteRepository;
+        this.authThrottleService = authThrottleService;
         this.authMailService = authMailService;
         this.passwordEncoder = passwordEncoder;
         this.authProperties = authProperties;
@@ -165,13 +173,19 @@ public class AuthService {
         token.setTokenHash(hashToken(rawToken));
         token.setExpiresAt(OffsetDateTime.now().plusHours(authProperties.getVerificationTokenHours()));
         emailVerificationTokenRepository.save(token);
-        authMailService.sendVerificationEmail(newUser, buildFrontendLink("/verify-email", rawToken));
+        String verificationLink = buildFrontendLink("/verify-email", rawToken);
+        authMailService.sendVerificationEmail(newUser, verificationLink);
 
-        return new AuthResponse(toResponse(newUser));
+        return new AuthResponse(
+                toResponse(newUser),
+                authMailService.isDeliveryEnabled(),
+                authMailService.isDeliveryEnabled() ? null : verificationLink
+        );
     }
 
-    public void requestPasswordReset(ForgotPasswordRequest request) {
+    public void requestPasswordReset(ForgotPasswordRequest request, String clientAddress) {
         String email = normalizeEmail(request.email());
+        authThrottleService.assertForgotPasswordAllowed(email, clientAddress);
         AuthUser user = authUserRepository.findByEmail(email).orElse(null);
         if (user == null
                 || user.getStatus() == AccountStatus.DISABLED
@@ -314,12 +328,13 @@ public class AuthService {
         return new InviteDetailsResponse(
                 invite.getEmail(),
                 invite.getFullName(),
+                invite.getInvitedRole(),
                 inviteStatus(invite),
                 invite.getExpiresAt()
         );
     }
 
-    public AuthResponse acceptTechnicianInvite(InviteAcceptanceRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+    public AuthResponse acceptInvite(InviteAcceptanceRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         validatePasswordChange(request.password(), request.confirmPassword());
         TechnicianInvite invite = technicianInviteRepository.findByTokenHash(hashToken(request.token()))
                 .orElseThrow(() -> new IllegalArgumentException("This invite link is invalid or has expired."));
@@ -330,7 +345,7 @@ public class AuthService {
         AuthUser user = invite.getUser();
         user.setFullName(invite.getFullName());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(UserRole.TECHNICIAN);
+        user.setRole(invite.getInvitedRole());
         user.setStatus(AccountStatus.ACTIVE);
         user.setAuthProviderType(AuthProviderType.LOCAL);
         user.setGoogleId(null);
@@ -429,9 +444,13 @@ public class AuthService {
         if (!StringUtils.hasText(request.batch()) || !request.batch().matches("^\\d{4}$")) {
             errors.put("batch", "Batch must be a 4 digit year.");
         }
-        if (StringUtils.hasText(request.batch()) && StringUtils.hasText(request.studentId()) && request.studentId().length() >= 6) {
-            String encodedYear = request.studentId().substring(2, 6);
-            if (!encodedYear.equals(request.batch())) {
+        if (StringUtils.hasText(request.batch())
+                && request.batch().matches("^\\d{4}$")
+                && StringUtils.hasText(request.studentId())
+                && request.studentId().matches(STUDENT_ID_PATTERN)) {
+            String encodedYear = request.studentId().substring(2, 4);
+            String batchYearSuffix = request.batch().substring(2);
+            if (!encodedYear.equals(batchYearSuffix)) {
                 errors.put("batch", "Batch must match the year encoded in the student ID.");
             }
         }
