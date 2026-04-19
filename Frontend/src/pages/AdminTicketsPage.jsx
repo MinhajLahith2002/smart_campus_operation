@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+<<<<<<< HEAD
+import { AlertTriangle, ArrowRight, Clock3, MapPin, Paperclip, ShieldAlert, Trash2, UserRoundCog, Wrench, X } from 'lucide-react';
+import { Card, Badge, Button } from '../components/ui/Primitives';
+import { assignTechnician, deleteTicket, getTicketSummary, getTickets, updateTicketStatus, toBackendRole } from '../lib/moduleCApi';
+import { getAdminUsers } from '../lib/authApi';
+=======
 import { AlertTriangle, ArrowRight, Clock3, MapPin, Paperclip, ShieldAlert, UserRoundCog, Wrench, X } from 'lucide-react';
 import { Card, Badge, Button, Input, NoticeBanner } from '../components/ui/Primitives';
 import { assignTechnician, getTicketSummary, getTickets, updateTicketStatus, toBackendRole } from '../lib/moduleCApi';
+>>>>>>> origin/main
 import { formatTicketStatusLabel, statusBadgeVariant } from '../lib/moduleCLabels';
-import { getDemoUsers } from '../lib/operationsApi';
 import { useAuth } from '../context/AuthContext';
 
 const statusOptions = ['REJECTED'];
@@ -24,6 +30,7 @@ export const AdminTicketsPage = () => {
   const [assignForm, setAssignForm] = useState({ technicianId: '', technicianName: '' });
   const [statusForm, setStatusForm] = useState({ status: 'REJECTED', resolutionNotes: '', detail: '' });
   const [saving, setSaving] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState(null);
   const [filters, setFilters] = useState({ status: 'ALL', priority: 'ALL', category: 'ALL' });
   const [archiveFilter, setArchiveFilter] = useState('ALL');
 
@@ -36,14 +43,21 @@ export const AdminTicketsPage = () => {
     try {
       setLoading(true);
       setError('');
-      const [ticketData, summaryData, demoUsers] = await Promise.all([
+      const [ticketData, summaryData, technicianUsers] = await Promise.all([
         getTickets({ role: user?.role, userId: user?.id }),
         getTicketSummary(),
-        getDemoUsers(),
+        getAdminUsers({ role: 'TECHNICIAN', status: 'ACTIVE' }),
       ]);
       setTickets(ticketData);
       setSummary(summaryData);
-      setTechnicians(demoUsers.filter((account) => account.role === 'TECHNICIAN'));
+      setTechnicians((technicianUsers || []).map((account) => ({
+        id: account.id,
+        name: account.fullName,
+        fullName: account.fullName,
+        email: account.email,
+        status: account.status,
+        available: account.status === 'ACTIVE',
+      })));
     } catch (err) {
       setError(err.message || 'Unable to load the incident desk.');
     } finally {
@@ -70,15 +84,40 @@ export const AdminTicketsPage = () => {
   const myAssignments = tickets.filter((item) => item.assignedTechnicianId === user?.id);
   const urgentUnassigned = activeTickets.filter((item) => !item.assignedTechnicianId && (item.priority === 'HIGH' || item.priority === 'CRITICAL'));
 
+  const technicianWorkload = useMemo(() => buildTechnicianWorkload(technicians, tickets), [technicians, tickets]);
+
   const assignableTechnicians = useMemo(() => {
     if (!assigningTicket) return [];
     const assignedId = assigningTicket.assignedTechnicianId;
-    return technicians.filter((technician) => technician.available || technician.id === assignedId);
-  }, [assigningTicket, technicians]);
+    return technicians
+      .filter((technician) => technician.available || technician.id === assignedId)
+      .sort((left, right) => {
+        const leftWorkload = technicianWorkload[left.id];
+        const rightWorkload = technicianWorkload[right.id];
+        return (leftWorkload?.recommendationScore || Number.POSITIVE_INFINITY) - (rightWorkload?.recommendationScore || Number.POSITIVE_INFINITY);
+      });
+  }, [assigningTicket, technicianWorkload, technicians]);
+
+  const recommendedTechnician = useMemo(() => {
+    if (!assignableTechnicians.length) return null;
+    return assignableTechnicians.find((technician) => technician.available) || assignableTechnicians[0];
+  }, [assignableTechnicians]);
+  const duplicateDispatchConflict = useMemo(
+    () => (assigningTicket ? findDispatchedDuplicateConflict(assigningTicket, tickets) : null),
+    [assigningTicket, tickets],
+  );
 
   const openAssignPanel = (ticket) => {
     const assignmentState = getAssignmentState(ticket, technicianDirectory, technicians);
-    const preferredTechnician = assignmentState.availableAlternatives[0]
+    const rankedTechnicians = technicians
+      .filter((technician) => technician.available || technician.id === ticket.assignedTechnicianId)
+      .sort((left, right) => {
+        const leftWorkload = technicianWorkload[left.id];
+        const rightWorkload = technicianWorkload[right.id];
+        return (leftWorkload?.recommendationScore || Number.POSITIVE_INFINITY) - (rightWorkload?.recommendationScore || Number.POSITIVE_INFINITY);
+      });
+    const preferredTechnician = rankedTechnicians.find((technician) => technician.available)
+      || assignmentState.availableAlternatives[0]
       || technicians.find((technician) => technician.available)
       || null;
 
@@ -87,7 +126,7 @@ export const AdminTicketsPage = () => {
     setAssigningTicket(ticket);
     setAssignForm({
       technicianId: preferredTechnician?.id || '',
-      technicianName: preferredTechnician?.name || '',
+      technicianName: (preferredTechnician?.fullName || preferredTechnician?.name) || '',
     });
   };
 
@@ -111,6 +150,11 @@ export const AdminTicketsPage = () => {
   const handleAssignSubmit = async (event) => {
     event.preventDefault();
     if (!assigningTicket || !assignForm.technicianId || !assignForm.technicianName) return;
+    if (duplicateDispatchConflict) {
+      const assignedTechnician = duplicateDispatchConflict.assignedTechnicianName || 'another technician';
+      setActionError(`A similar active ticket (#${duplicateDispatchConflict.id}) is already owned by ${assignedTechnician}. Reject or close the duplicate instead of dispatching a second technician.`);
+      return;
+    }
 
     try {
       setSaving(true);
@@ -151,6 +195,28 @@ export const AdminTicketsPage = () => {
     } catch (err) {
       setActionError(err.message || 'Unable to update ticket status.');
       setSaving(false);
+    }
+  };
+
+  const handleDeleteTicket = async (ticket) => {
+    const confirmed = window.confirm('Delete this ticket permanently? This removes the whole ticket record and cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      setDeletingTicketId(ticket.id);
+      setActionError('');
+      await deleteTicket(ticket.id, {
+        actorId: user.id,
+        actorName: user.name,
+        actorRole: toBackendRole(user.role),
+        note: 'Admin permanently deleted the full ticket record from the incident desk.',
+      });
+      closePanels();
+      await loadDesk();
+    } catch (err) {
+      setActionError(err.message || 'Unable to delete ticket.');
+    } finally {
+      setDeletingTicketId(null);
     }
   };
 
@@ -238,17 +304,56 @@ export const AdminTicketsPage = () => {
                       const selected = assignableTechnicians.find((technician) => technician.id === event.target.value);
                       setAssignForm({
                         technicianId: selected?.id || '',
-                        technicianName: selected?.name || '',
+                        technicianName: (selected?.fullName || selected?.name) || '',
                       });
                     }}
                   >
                     <option value="">Select technician</option>
-                    {assignableTechnicians.filter((technician) => technician.available).map((technician) => (
-                      <option key={technician.id} value={technician.id}>{technician.name} ({technician.id})</option>
-                    ))}
+                    {assignableTechnicians.filter((technician) => technician.available).map((technician) => {
+                      const workload = technicianWorkload[technician.id];
+                      return (
+                        <option key={technician.id} value={technician.id}>
+                          {technician.name} - {workload?.activeTickets || 0} active - {workload?.highPriorityTickets || 0} high - avg {workload?.averageResolutionLabel || 'No resolved tickets yet'}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
+                {recommendedTechnician && (
+                  <div className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm">
+                    <p className="font-semibold text-foreground">Recommended technician: {recommendedTechnician.name}</p>
+                    <p className="mt-1 text-muted-foreground">
+                      {describeTechnicianWorkload(technicianWorkload[recommendedTechnician.id])}
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-3">
+                  <div className="grid gap-3">
+                    {assignableTechnicians.filter((technician) => technician.available).map((technician) => {
+                      const workload = technicianWorkload[technician.id];
+                      const isRecommended = recommendedTechnician?.id === technician.id;
+                      const isSelected = assignForm.technicianId === technician.id;
+                      return (
+                        <button
+                          key={technician.id}
+                          type="button"
+                          onClick={() => setAssignForm({ technicianId: technician.id, technicianName: technician.fullName || technician.name })}
+                          className={`rounded-2xl border px-4 py-4 text-left transition-all ${isSelected ? 'border-primary bg-primary/10' : 'border-border bg-muted/35 hover:border-primary/35 dark:bg-white/5'} ${isRecommended ? 'ring-1 ring-success/35' : ''}`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold">{technician.name}</p>
+                            <Badge variant={isRecommended ? 'success' : 'outline'}>{isRecommended ? 'Recommended' : 'Available'}</Badge>
+                          </div>
+                          <p className="mt-2 text-sm text-muted-foreground">{technician.id}{technician.email ? ` - ${technician.email}` : ''}</p>
+                          <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
+                            <span>{workload?.activeTickets || 0} active tickets</span>
+                            <span>{workload?.highPriorityTickets || 0} high priority</span>
+                            <span>Avg {workload?.averageResolutionLabel || 'No resolved tickets yet'}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                   {assigningTicket.assignedTechnicianId && technicianDirectory[assigningTicket.assignedTechnicianId] && (
                     <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm dark:bg-white/5">
                       <p className="font-semibold">Current technician</p>
@@ -264,8 +369,13 @@ export const AdminTicketsPage = () => {
                     </p>
                   </div>
                 </div>
+                {duplicateDispatchConflict && (
+                  <div className="rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
+                    A similar active ticket (#{duplicateDispatchConflict.id}) is already owned by {duplicateDispatchConflict.assignedTechnicianName || 'another technician'}. Reject or close this duplicate instead of assigning another technician.
+                  </div>
+                )}
                 <div className="flex gap-3">
-                  <Button type="submit" className="gap-2" isLoading={saving} disabled={!assignForm.technicianId}><ShieldAlert size={16} /> Confirm assignment</Button>
+                  <Button type="submit" className="gap-2" isLoading={saving} disabled={!assignForm.technicianId || Boolean(duplicateDispatchConflict)}><ShieldAlert size={16} /> Confirm assignment</Button>
                   <Button type="button" variant="outline" onClick={closePanels}>Cancel</Button>
                 </div>
               </form>
@@ -339,6 +449,8 @@ export const AdminTicketsPage = () => {
                   onOpen={() => navigate(`/tickets/${ticket.id}`)}
                   onReject={() => openStatusPanel(ticket)}
                   onAssign={() => openAssignPanel(ticket)}
+                  onDelete={() => handleDeleteTicket(ticket)}
+                  deleting={deletingTicketId === ticket.id}
                 />
               );
             })}
@@ -363,6 +475,8 @@ export const AdminTicketsPage = () => {
                 ticket={ticket}
                 assignmentState={getAssignmentState(ticket, technicianDirectory, technicians)}
                 onOpen={() => navigate(`/tickets/${ticket.id}`)}
+                onDelete={() => handleDeleteTicket(ticket)}
+                deleting={deletingTicketId === ticket.id}
                 archived
               />
             ))}
@@ -372,6 +486,59 @@ export const AdminTicketsPage = () => {
       </section>
     </div>
   );
+};
+
+const ACTIVE_TECHNICIAN_STATUSES = new Set(['ASSIGNED', 'IN_PROGRESS']);
+const HIGH_PRIORITY_LEVELS = new Set(['HIGH', 'CRITICAL']);
+const ACTIVE_DUPLICATE_STATUSES = new Set(['OPEN', 'TRIAGED', 'ASSIGNED', 'IN_PROGRESS']);
+const DUPLICATE_STOP_WORDS = new Set(['the', 'and', 'with', 'from', 'that', 'this', 'have', 'into', 'during', 'after', 'before', 'when', 'where', 'which', 'issue', 'problem', 'reported', 'reporting', 'affecting', 'session', 'lecture', 'campus', 'building', 'floor', 'room', 'asset']);
+
+const buildTechnicianWorkload = (technicians, tickets) => Object.fromEntries(technicians.map((technician) => {
+  const technicianTickets = tickets.filter((ticket) => ticket.assignedTechnicianId === technician.id);
+  const activeAssignedTickets = technicianTickets.filter((ticket) => ACTIVE_TECHNICIAN_STATUSES.has(ticket.status));
+  const highPriorityTickets = activeAssignedTickets.filter((ticket) => HIGH_PRIORITY_LEVELS.has(ticket.priority));
+  const resolvedDurations = technicianTickets
+    .map((ticket) => {
+      const startedAt = ticket.technicianStartedAt || ticket.assignedAt;
+      const finishedAt = ticket.resolvedAt || ticket.closedAt;
+      if (!startedAt || !finishedAt) return null;
+      const duration = new Date(finishedAt).getTime() - new Date(startedAt).getTime();
+      return Number.isFinite(duration) && duration > 0 ? duration : null;
+    })
+    .filter(Boolean);
+
+  const averageResolutionMs = resolvedDurations.length
+    ? resolvedDurations.reduce((sum, value) => sum + value, 0) / resolvedDurations.length
+    : null;
+
+  const recommendationScore = (activeAssignedTickets.length * 100)
+    + (highPriorityTickets.length * 30)
+    + Math.round((averageResolutionMs || 0) / (1000 * 60 * 60));
+
+  return [technician.id, {
+    activeTickets: activeAssignedTickets.length,
+    highPriorityTickets: highPriorityTickets.length,
+    averageResolutionMs,
+    averageResolutionLabel: formatWorkloadDuration(averageResolutionMs),
+    recommendationScore,
+  }];
+}));
+
+const formatWorkloadDuration = (durationMs) => {
+  if (!durationMs) return '';
+  const totalMinutes = Math.max(1, Math.round(durationMs / (1000 * 60)));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+};
+
+const describeTechnicianWorkload = (workload) => {
+  if (!workload) return 'No workload snapshot available.';
+  return `${workload.activeTickets} active ticket(s), ${workload.highPriorityTickets} high-priority ticket(s), average resolution ${workload.averageResolutionLabel || 'not available yet'}.`;
 };
 
 const getAssignmentState = (ticket, technicianDirectory, technicians) => {
@@ -404,7 +571,7 @@ const getAssignmentState = (ticket, technicianDirectory, technicians) => {
   };
 };
 
-const TicketDeskCard = ({ ticket, assignmentState, onOpen, onReject, onAssign, archived = false }) => (
+const TicketDeskCard = ({ ticket, assignmentState, onOpen, onReject, onAssign, onDelete, deleting = false, archived = false }) => (
   <Card className={`bg-white/70 p-6 dark:bg-white/5 ${!archived && !ticket.assignedTechnicianId && (ticket.priority === 'HIGH' || ticket.priority === 'CRITICAL') ? 'border-danger/35 shadow-[0_18px_36px_rgba(239,68,68,0.08)]' : ''}`}>
     <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
       <div className="space-y-4">
@@ -439,6 +606,11 @@ const TicketDeskCard = ({ ticket, assignmentState, onOpen, onReject, onAssign, a
         {!archived && ticket.status !== 'REJECTED' && ticket.status !== 'CLOSED' && ticket.status !== 'RESOLVED' && ticket.status !== 'IN_PROGRESS' && assignmentState.canReassign && (
           <Button variant="outline" className="gap-2" onClick={onAssign}><ShieldAlert size={16} /> Reassign technician</Button>
         )}
+        {archived && (ticket.status === 'CLOSED' || ticket.status === 'REJECTED') && (
+          <Button variant="outline" className="gap-2" onClick={onDelete} isLoading={deleting}>
+            <Trash2 size={16} /> Delete ticket
+          </Button>
+        )}
         <Button variant="ghost" className="gap-2" onClick={onOpen}>
           {archived ? 'Open archived case' : 'Open case file'} <ArrowRight size={16} />
         </Button>
@@ -464,12 +636,12 @@ const FilterSelect = ({ label, value, onChange, options }) => (
 );
 
 const InfoTile = ({ title, icon, copy }) => (
-  <div className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
+  <div className="min-w-0 rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
     <div className="mb-2 flex items-center gap-2 font-semibold">
       {icon}
       {title}
     </div>
-    <p className="text-sm leading-7 text-muted-foreground">{copy}</p>
+    <p className="overflow-hidden break-words text-sm leading-7 text-muted-foreground [overflow-wrap:anywhere]">{copy}</p>
   </div>
 );
 
@@ -479,3 +651,47 @@ const EmptyState = ({ title, copy }) => (
     <p className="mt-2">{copy}</p>
   </Card>
 );
+
+const findDispatchedDuplicateConflict = (ticket, tickets) => tickets
+  .filter((other) => other.id !== ticket.id)
+  .filter((other) => ACTIVE_DUPLICATE_STATUSES.has(other.status))
+  .filter((other) => isLikelySameIncident(ticket, other))
+  .sort((left, right) => {
+    const leftTime = new Date(left.createdAt || 0).getTime();
+    const rightTime = new Date(right.createdAt || 0).getTime();
+    if (leftTime !== rightTime) return leftTime - rightTime;
+    return (left.id || 0) - (right.id || 0);
+  })
+  .find((other) => other.status === 'ASSIGNED' || other.status === 'IN_PROGRESS') || null;
+
+const normalise = (value) => (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const extractKeywords = (...segments) => segments
+  .filter(Boolean)
+  .join(' ')
+  .toLowerCase()
+  .split(/[^a-z0-9]+/)
+  .filter((word) => word.length > 2 && !DUPLICATE_STOP_WORDS.has(word));
+
+const isLikelySameIncident = (first, second) => {
+  if (first.category !== second.category) return false;
+
+  const firstResourceName = normalise(first.resourceName);
+  const secondResourceName = normalise(second.resourceName);
+  const firstResourceLocation = normalise(first.resourceLocation);
+  const secondResourceLocation = normalise(second.resourceLocation);
+  const firstIncidentLocation = normalise(first.incidentLocation);
+  const secondIncidentLocation = normalise(second.incidentLocation);
+
+  const sameResource = firstResourceName && firstResourceName === secondResourceName;
+  const sameIncidentLocation = firstIncidentLocation && firstIncidentLocation === secondIncidentLocation;
+  const sameBaseLocation = firstResourceLocation && firstResourceLocation === secondResourceLocation;
+  if (!(sameResource || sameIncidentLocation || sameBaseLocation)) return false;
+
+  const firstKeywords = new Set(extractKeywords(first.title, first.description, first.operationalImpact));
+  const secondKeywords = new Set(extractKeywords(second.title, second.description, second.operationalImpact));
+  const hasSharedKeyword = [...firstKeywords].some((keyword) => secondKeywords.has(keyword));
+
+  return sameIncidentLocation || hasSharedKeyword;
+};
+

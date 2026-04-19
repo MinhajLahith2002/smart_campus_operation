@@ -1,6 +1,11 @@
 package com.smartcampus.operationshub.auth.service;
 
+<<<<<<< HEAD
+import com.smartcampus.operationshub.config.AuthProperties;
+import com.smartcampus.operationshub.config.AuthBootstrapSupport;
+=======
 import com.smartcampus.operationshub.auth.config.AuthProperties;
+>>>>>>> origin/main
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
@@ -23,6 +28,7 @@ import java.util.EnumSet;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,16 +40,19 @@ public class AuthAdminService {
     private final TechnicianInviteRepository technicianInviteRepository;
     private final AuthMailService authMailService;
     private final AuthProperties authProperties;
+    private final PasswordEncoder passwordEncoder;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthAdminService(AuthUserRepository authUserRepository,
                             TechnicianInviteRepository technicianInviteRepository,
                             AuthMailService authMailService,
-                            AuthProperties authProperties) {
+                            AuthProperties authProperties,
+                            PasswordEncoder passwordEncoder) {
         this.authUserRepository = authUserRepository;
         this.technicianInviteRepository = technicianInviteRepository;
         this.authMailService = authMailService;
         this.authProperties = authProperties;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional(readOnly = true)
@@ -53,6 +62,7 @@ public class AuthAdminService {
                                            AuthProviderType provider,
                                            AuthService authService) {
         String normalizedQuery = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        AuthBootstrapSupport.syncConfiguredAccounts(authProperties, authUserRepository, passwordEncoder);
 
         return authUserRepository.findAll().stream()
                 .filter(user -> role == null || user.getRole() == role)

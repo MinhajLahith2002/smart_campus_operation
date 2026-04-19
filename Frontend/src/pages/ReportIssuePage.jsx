@@ -16,11 +16,10 @@ import {
   Sparkles,
   Upload,
 } from 'lucide-react';
-import { createTicket, getTicket, getTickets, toBackendRole, updateTicket } from '../lib/moduleCApi';
+import { checkDuplicateTickets, createTicket, getTicket, getTickets, toBackendRole, updateTicket } from '../lib/moduleCApi';
 import { getBookings, getResources } from '../lib/operationsApi';
 import {
   completenessScore,
-  findSimilarTickets,
   parseEvidenceItems,
   responseTargetFromPriority,
   scoreIncident,
@@ -62,6 +61,8 @@ export const ReportIssuePage = () => {
   const [loadingSignals, setLoadingSignals] = useState(true);
   const [loadingTicket, setLoadingTicket] = useState(false);
   const [existingTickets, setExistingTickets] = useState([]);
+  const [duplicateMatches, setDuplicateMatches] = useState([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [editingTicket, setEditingTicket] = useState(null);
   const [resources, setResources] = useState([]);
   const [bookingOptions, setBookingOptions] = useState([]);
@@ -137,6 +138,11 @@ export const ReportIssuePage = () => {
   const contextSelected = formData.issueContext === 'BOOKING' || formData.issueContext === 'GENERAL';
   const usingBookingContext = formData.issueContext === 'BOOKING' && bookingOptions.length > 0;
   const canProceedWithContext = usingBookingContext ? !!selectedBooking : !!selectedResource;
+  const duplicateCheckResource = useMemo(() => (
+    usingBookingContext
+      ? resources.find((resource) => String(resource.id) === String(selectedBooking?.resourceId))
+      : selectedResource
+  ), [resources, selectedBooking, selectedResource, usingBookingContext]);
 
   useEffect(() => {
     if (!usingBookingContext || !selectedBooking) return;
@@ -183,14 +189,68 @@ export const ReportIssuePage = () => {
   const incidentScore = useMemo(() => scoreIncident({ ...formData, evidenceItems }), [formData, evidenceItems]);
   const suggestedPriority = useMemo(() => suggestedPriorityFromScore(incidentScore), [incidentScore]);
   const intakeCompleteness = useMemo(() => completenessScore({ ...formData, evidenceItems }), [formData, evidenceItems]);
-  const similarTickets = useMemo(() => findSimilarTickets({
-    tickets: existingTickets,
-    resourceName: selectedResource?.name || selectedBooking?.resourceName || '',
-    category: formData.category,
-    title: formData.title,
-  }), [existingTickets, selectedResource, selectedBooking, formData.category, formData.title]);
   const smartResponseTarget = responseTargetFromPriority(suggestedPriority);
   const safetyMode = incidentScore >= 82 || formData.category === 'SAFETY';
+
+  useEffect(() => {
+    if (!contextSelected || !canProceedWithContext || !duplicateCheckResource || isEditing) {
+      setDuplicateMatches([]);
+      setCheckingDuplicates(false);
+      return undefined;
+    }
+
+    const issueText = [formData.title, formData.description, formData.operationalImpact].join(' ').trim();
+    if (issueText.length < 8) {
+      setDuplicateMatches([]);
+      setCheckingDuplicates(false);
+      return undefined;
+    }
+
+    let active = true;
+    setCheckingDuplicates(true);
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const matches = await checkDuplicateTickets({
+          resourceName: duplicateCheckResource.name,
+          resourceLocation: duplicateCheckResource.location,
+          incidentLocation: formData.incidentLocation.trim() || duplicateCheckResource.location,
+          category: formData.category,
+          title: formData.title,
+          description: formData.description,
+          operationalImpact: formData.operationalImpact,
+          excludeTicketId: ticketId ? Number(ticketId) : null,
+        });
+        if (active) {
+          setDuplicateMatches(matches || []);
+        }
+      } catch (_) {
+        if (active) {
+          setDuplicateMatches([]);
+        }
+      } finally {
+        if (active) {
+          setCheckingDuplicates(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    canProceedWithContext,
+    contextSelected,
+    duplicateCheckResource,
+    formData.category,
+    formData.description,
+    formData.incidentLocation,
+    formData.operationalImpact,
+    formData.title,
+    isEditing,
+    ticketId,
+  ]);
 
   const handleChange = (field, value) => {
     setFormData((current) => ({ ...current, [field]: value }));
@@ -384,8 +444,8 @@ export const ReportIssuePage = () => {
                 ? 'Choose whether the issue came from a booking or a general campus asset.'
                 : usingBookingContext && selectedBooking
                   ? `Linked booking selected: ${bookingLabel(selectedBooking)}.`
-                  : similarTickets.length
-                    ? `${similarTickets.length} similar active incident(s) found. This looks like a repeat issue cluster and may need deeper root-cause attention.`
+                  : duplicateMatches.length
+                    ? `${duplicateMatches.length} similar active incident(s) found. This may already be in the live maintenance workflow.`
                     : 'Select the exact asset before continuing so the desk receives a clear, actionable ticket.'}
             </div>
           </div>
@@ -545,10 +605,53 @@ export const ReportIssuePage = () => {
               </>
             )}
 
+            {!isEditing && contextSelected && canProceedWithContext && (checkingDuplicates || duplicateMatches.length > 0) && (
+              <div className="rounded-2xl border border-warning/40 bg-warning/10 px-5 py-5">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle size={18} className="mt-0.5 text-warning" />
+                  <div>
+                    <p className="font-semibold text-foreground">A similar issue may already be reported.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      We check recent active incidents for the same resource, location, category, and wording. This will not block your ticket if you still need to continue.
+                    </p>
+                  </div>
+                </div>
+                {checkingDuplicates ? (
+                  <p className="mt-4 text-sm text-muted-foreground">Checking recent open and in-progress tickets...</p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {duplicateMatches.slice(0, 3).map((match) => (
+                      <div key={match.ticketId} className="rounded-2xl border border-border bg-white/65 px-4 py-4 dark:bg-white/5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="info">{match.status}</Badge>
+                          <Badge variant="outline">{match.matchScore}% match</Badge>
+                        </div>
+                        <p className="mt-3 font-semibold text-foreground">{match.title}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{match.resourceName} - {match.incidentLocation}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">{match.matchReasons.join(' - ')}</p>
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          {match.viewable ? (
+                            <Button type="button" variant="outline" onClick={() => navigate(`/tickets/${match.ticketId}`)}>View existing ticket</Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Already active in another user workflow.</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-sm text-muted-foreground">If this is a separate failure, you can still submit your new ticket below.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {error && <div className="rounded-2xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
 
             <div className="sticky bottom-4 flex flex-col gap-3 rounded-2xl border border-border bg-[var(--panel)]/95 px-4 py-4 backdrop-blur md:flex-row md:items-center md:justify-between">
-              <p className="text-sm text-muted-foreground">This flow now blocks the report until the affected booking or asset is selected, and only the exact location is prefilled from that context.</p>
+              <p className="text-sm text-muted-foreground">
+                {duplicateMatches.length
+                  ? 'A possible duplicate was found, but you can still continue if this is a separate failure.'
+                  : 'This flow now blocks the report until the affected booking or asset is selected, and only the exact location is prefilled from that context.'}
+              </p>
               <div className="flex gap-3">
                 <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
                 <Button type="submit" className="gap-2" isLoading={isSubmitting || loadingTicket} disabled={!contextSelected || !canProceedWithContext || loadingTicket}>{isEditing ? 'Save Changes' : 'Submit Ticket'} {!isSubmitting && !loadingTicket && <ArrowRight size={18} />}</Button>
@@ -563,7 +666,7 @@ export const ReportIssuePage = () => {
             <div className="space-y-3">
               <WorkflowStep title="Incident confidence" copy={`${intakeCompleteness}/100 completeness. Higher completeness gives admins faster, cleaner triage.`} />
               <WorkflowStep title="Priority recommendation" copy={`The current wording suggests ${suggestedPriority} priority with a target response of ${smartResponseTarget.toLowerCase()}.`} />
-              <WorkflowStep title="Duplicate awareness" copy={loadingSignals ? 'Checking recent incidents across the campus network.' : similarTickets.length ? `${similarTickets.length} similar active incident(s) detected. Consider mentioning if this is a repeat failure.` : 'No similar active incidents detected right now.'} />
+              <WorkflowStep title="Duplicate awareness" copy={checkingDuplicates ? 'Checking recent incidents across the campus network.' : duplicateMatches.length ? `${duplicateMatches.length} possible duplicate ticket(s) detected. Review the live case before raising another one.` : 'No similar active incidents detected right now.'} />
             </div>
           </Card>
 

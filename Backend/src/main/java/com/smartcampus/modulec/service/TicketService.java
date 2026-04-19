@@ -11,6 +11,8 @@ import com.smartcampus.operationshub.auth.domain.UserRole;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
 import com.smartcampus.modulec.dto.AssignTechnicianRequest;
 import com.smartcampus.modulec.dto.CreateTicketRequest;
+import com.smartcampus.modulec.dto.DuplicateTicketCheckRequest;
+import com.smartcampus.modulec.dto.DuplicateTicketMatchResponse;
 import com.smartcampus.modulec.dto.TicketActivityResponse;
 import com.smartcampus.modulec.dto.TicketCommentRequest;
 import com.smartcampus.modulec.dto.TicketCommentResponse;
@@ -27,7 +29,9 @@ import com.smartcampus.modulec.repository.TicketRepository;
 import com.smartcampus.operationshub.auth.security.AuthUserPrincipal;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -44,6 +48,8 @@ public class TicketService {
     private static final Set<String> CRITICAL_KEYWORDS = Set.of("fire", "smoke", "flood", "gas leak", "electric shock", "sparking", "collapse", "unsafe", "injury");
     private static final Set<String> HIGH_KEYWORDS = Set.of("network down", "lab closed", "water leak", "power outage", "security", "camera offline", "server down");
     private static final Set<String> MEDIUM_KEYWORDS = Set.of("projector", "air conditioner", "wifi", "router", "printer", "lighting", "door");
+    private static final Set<TicketStatus> ACTIVE_DUPLICATE_STATUSES = Set.of(TicketStatus.OPEN, TicketStatus.TRIAGED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS);
+    private static final Set<String> DUPLICATE_STOP_WORDS = Set.of("the", "and", "with", "from", "that", "this", "have", "into", "during", "after", "before", "when", "where", "which", "issue", "problem", "reported", "reporting", "affecting", "session", "lecture", "campus", "building", "floor", "room", "asset");
 
     private final TicketRepository ticketRepository;
     private final TicketCommentRepository ticketCommentRepository;
@@ -171,13 +177,16 @@ public class TicketService {
 
     public void deleteTicket(@NonNull Long ticketId, TicketDecisionRequest request, AuthUserPrincipal principal) {
         Ticket ticket = findTicket(ticketId);
-        ensureEditableByReporter(ticket, principal.getPublicId(), principal.getRole(), "Only the original reporter can delete an open ticket.");
+        ensureCanDeleteTicket(ticket, principal.getPublicId(), principal.getRole(), "Only the original reporter or an admin can delete this ticket.");
         ticketRepository.delete(ticket);
     }
 
     public TicketResponse assignTechnician(Long ticketId, AssignTechnicianRequest request, AuthUserPrincipal principal) {
         Ticket ticket = findTicket(ticketId);
         ensureAdmin(principal.getRole(), "Only admins can assign technicians.");
+        validateAssignment(request);
+        ensureAssignable(ticket);
+        ensureNoDuplicateDispatchConflict(ticket);
 
         AuthUser technician = authUserRepository.findByPublicId(request.technicianId())
                 .orElseThrow(() -> new IllegalArgumentException("Selected technician was not found."));
@@ -190,9 +199,7 @@ public class TicketService {
         ticket.setAssignedTechnicianName(technician.getFullName());
         ticket.setAssignedByName(fallbackActorName(principal.getFullName(), "Operations Desk"));
         ticket.setAssignedAt(now);
-        if (ticket.getStatus() != TicketStatus.RESOLVED && ticket.getStatus() != TicketStatus.CLOSED && ticket.getStatus() != TicketStatus.REJECTED) {
-            ticket.setStatus(TicketStatus.ASSIGNED);
-        }
+        ticket.setStatus(TicketStatus.ASSIGNED);
         ticket.setUpdatedAt(now);
         addActivity(ticket, principal.getFullName(), principal.getRole(), "TECHNICIAN_ASSIGNED",
                 "Assigned to " + technician.getFullName() + " (" + technician.getPublicId() + ").");
@@ -282,14 +289,27 @@ public class TicketService {
         if (isBlank(request.note())) {
             throw new IllegalArgumentException("A reopen note is required when reporting the issue as still broken.");
         }
+        validateSingleEvidenceUpload(request.evidenceLabel(), request.evidenceDataUrl());
 
+        OffsetDateTime now = OffsetDateTime.now();
         ticket.setStatus(TicketStatus.OPEN);
-        ticket.setUpdatedAt(OffsetDateTime.now());
+        ticket.setAssignedTechnicianId(null);
+        ticket.setAssignedTechnicianName(null);
+        ticket.setAssignedByName(null);
+        ticket.setAssignedAt(null);
+        ticket.setTechnicianStartedByName(null);
+        ticket.setTechnicianStartedAt(null);
+        ticket.setResolvedByName(null);
+        ticket.setResolvedAt(null);
+        ticket.setClosedByName(null);
+        ticket.setClosedAt(null);
+        ticket.setUpdatedAt(now);
+        appendReopenEvidence(ticket, request.evidenceLabel(), request.evidenceDataUrl());
         addActivity(ticket,
                 principal.getFullName(),
                 principal.getRole(),
                 "TICKET_REOPENED",
-                request.note().trim());
+                buildReopenDetail(request.note(), request.evidenceLabel()));
 
         return map(ticketRepository.save(ticket));
     }
@@ -427,6 +447,23 @@ public class TicketService {
         }
     }
 
+    private void ensureCanDeleteTicket(Ticket ticket, String actorId, UserRole actorRole, String message) {
+        if (actorRole == UserRole.ADMIN) {
+            return;
+        }
+        if (actorRole != UserRole.STUDENT && actorRole != UserRole.STAFF) {
+            throw new SecurityException(message);
+        }
+        if (actorId == null || !actorId.equals(ticket.getReporterId())) {
+            throw new SecurityException(message);
+        }
+        if (ticket.getStatus() != TicketStatus.OPEN
+                && ticket.getStatus() != TicketStatus.CLOSED
+                && ticket.getStatus() != TicketStatus.REJECTED) {
+            throw new IllegalArgumentException("Only open, closed, or rejected tickets can be deleted by the reporter.");
+        }
+    }
+
     private void ensureCanView(Ticket ticket, String actorId, UserRole actorRole, String message) {
         if (actorRole == UserRole.ADMIN) return;
         if (actorRole == UserRole.TECHNICIAN && actorId != null && actorId.equals(ticket.getAssignedTechnicianId())) return;
@@ -438,6 +475,85 @@ public class TicketService {
         if (ticket.getStatus() == TicketStatus.CLOSED || ticket.getStatus() == TicketStatus.REJECTED) {
             throw new IllegalArgumentException("Comments are disabled for closed or rejected tickets.");
         }
+    }
+
+    private void ensureAssignable(Ticket ticket) {
+        if (ticket.getStatus() == TicketStatus.IN_PROGRESS) {
+            throw new IllegalArgumentException("This ticket is already in progress, so technician reassignment is locked.");
+        }
+        if (ticket.getStatus() == TicketStatus.RESOLVED || ticket.getStatus() == TicketStatus.CLOSED || ticket.getStatus() == TicketStatus.REJECTED) {
+            throw new IllegalArgumentException("Only open, triaged, or assigned tickets can receive a technician assignment.");
+        }
+    }
+
+    private void ensureNoDuplicateDispatchConflict(Ticket ticket) {
+        List<Ticket> similarActiveTickets = ticketRepository.findAll().stream()
+                .filter(other -> !Objects.equals(other.getId(), ticket.getId()))
+                .filter(other -> ACTIVE_DUPLICATE_STATUSES.contains(other.getStatus()))
+                .filter(other -> isLikelySameIncident(ticket, other))
+                .sorted(Comparator.comparing(Ticket::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(Ticket::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+
+        Ticket dispatchedDuplicate = similarActiveTickets.stream()
+                .filter(other -> other.getStatus() == TicketStatus.ASSIGNED || other.getStatus() == TicketStatus.IN_PROGRESS)
+                .findFirst()
+                .orElse(null);
+        if (dispatchedDuplicate != null) {
+            String assignedTechnician = isBlank(dispatchedDuplicate.getAssignedTechnicianName()) ? "another technician" : dispatchedDuplicate.getAssignedTechnicianName();
+            throw new IllegalArgumentException("A similar active ticket (#" + dispatchedDuplicate.getId() + ") is already owned by " + assignedTechnician + ". Reject or close the duplicate instead of dispatching a second technician.");
+        }
+
+        Ticket canonicalTicket = similarActiveTickets.stream().findFirst().orElse(null);
+        if (canonicalTicket != null && shouldPreferCanonicalTicket(canonicalTicket, ticket)) {
+            throw new IllegalArgumentException("A similar active ticket (#" + canonicalTicket.getId() + ") already exists for this issue. Assign the technician to that ticket and reject this duplicate to avoid splitting the same problem across multiple cases.");
+        }
+    }
+
+    private boolean shouldPreferCanonicalTicket(Ticket canonicalTicket, Ticket currentTicket) {
+        OffsetDateTime canonicalCreatedAt = canonicalTicket.getCreatedAt();
+        OffsetDateTime currentCreatedAt = currentTicket.getCreatedAt();
+        if (canonicalCreatedAt != null && currentCreatedAt != null && canonicalCreatedAt.isBefore(currentCreatedAt)) {
+            return true;
+        }
+        if (canonicalCreatedAt != null && currentCreatedAt == null) {
+            return true;
+        }
+        if (canonicalCreatedAt == null && currentCreatedAt != null) {
+            return false;
+        }
+        Long canonicalId = canonicalTicket.getId();
+        Long currentId = currentTicket.getId();
+        if (canonicalId == null || currentId == null) {
+            return false;
+        }
+        return canonicalId < currentId;
+    }
+
+    private boolean isLikelySameIncident(Ticket first, Ticket second) {
+        if (first.getCategory() != second.getCategory()) {
+            return false;
+        }
+
+        String firstResourceName = normalise(first.getResourceName());
+        String secondResourceName = normalise(second.getResourceName());
+        String firstResourceLocation = normalise(first.getResourceLocation());
+        String secondResourceLocation = normalise(second.getResourceLocation());
+        String firstIncidentLocation = normalise(first.getIncidentLocation());
+        String secondIncidentLocation = normalise(second.getIncidentLocation());
+
+        boolean sameResource = !firstResourceName.isBlank() && firstResourceName.equals(secondResourceName);
+        boolean sameIncidentLocation = !firstIncidentLocation.isBlank() && firstIncidentLocation.equals(secondIncidentLocation);
+        boolean sameBaseLocation = !firstResourceLocation.isBlank() && firstResourceLocation.equals(secondResourceLocation);
+        if (!(sameResource || sameIncidentLocation || sameBaseLocation)) {
+            return false;
+        }
+
+        Set<String> firstKeywords = extractKeywords(first.getTitle(), first.getDescription(), first.getOperationalImpact());
+        Set<String> secondKeywords = extractKeywords(second.getTitle(), second.getDescription(), second.getOperationalImpact());
+        Set<String> sharedKeywords = new LinkedHashSet<>(firstKeywords);
+        sharedKeywords.retainAll(secondKeywords);
+        return sameIncidentLocation || !sharedKeywords.isEmpty();
     }
 
     private void ensureStatusPermission(Ticket ticket, String actorId, UserRole actorRole, TicketStatus nextStatus) {
@@ -468,6 +584,142 @@ public class TicketService {
         if (!allowed) {
             throw new IllegalArgumentException("Illegal ticket transition from " + currentStatus + " to " + nextStatus + ".");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<DuplicateTicketMatchResponse> findPossibleDuplicates(DuplicateTicketCheckRequest request, AuthUserPrincipal principal) {
+        validateDuplicateCheckRequest(request);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime recentThreshold = now.minusDays(14);
+        String requestResourceName = normalise(request.resourceName());
+        String requestResourceLocation = normalise(request.resourceLocation());
+        String requestIncidentLocation = normalise(request.incidentLocation());
+        Set<String> requestKeywords = extractKeywords(request.title(), request.description(), request.operationalImpact());
+
+        return ticketRepository.findAll().stream()
+                .filter(ticket -> request.excludeTicketId() == null || !Objects.equals(ticket.getId(), request.excludeTicketId()))
+                .filter(ticket -> ACTIVE_DUPLICATE_STATUSES.contains(ticket.getStatus()))
+                .filter(ticket -> ticket.getUpdatedAt() != null && !ticket.getUpdatedAt().isBefore(recentThreshold))
+                .map(ticket -> buildDuplicateMatch(ticket, principal, requestResourceName, requestResourceLocation, requestIncidentLocation, request.category(), requestKeywords, now))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(DuplicateTicketMatchResponse::matchScore).reversed()
+                        .thenComparing(DuplicateTicketMatchResponse::updatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(5)
+                .toList();
+    }
+
+    private DuplicateTicketMatchResponse buildDuplicateMatch(Ticket ticket,
+                                                             AuthUserPrincipal principal,
+                                                             String requestResourceName,
+                                                             String requestResourceLocation,
+                                                             String requestIncidentLocation,
+                                                             com.smartcampus.modulec.domain.TicketCategory requestCategory,
+                                                             Set<String> requestKeywords,
+                                                             OffsetDateTime now) {
+        if (ticket.getCategory() != requestCategory) {
+            return null;
+        }
+
+        String ticketResourceName = normalise(ticket.getResourceName());
+        String ticketResourceLocation = normalise(ticket.getResourceLocation());
+        String ticketIncidentLocation = normalise(ticket.getIncidentLocation());
+
+        boolean sameResource = requestResourceName.equals(ticketResourceName);
+        boolean sameIncidentLocation = !requestIncidentLocation.isBlank() && requestIncidentLocation.equals(ticketIncidentLocation);
+        boolean sameBaseLocation = !requestResourceLocation.isBlank() && requestResourceLocation.equals(ticketResourceLocation);
+
+        if (!(sameResource || sameIncidentLocation || sameBaseLocation)) {
+            return null;
+        }
+
+        Set<String> ticketKeywords = extractKeywords(ticket.getTitle(), ticket.getDescription(), ticket.getOperationalImpact());
+        Set<String> sharedKeywords = new LinkedHashSet<>(requestKeywords);
+        sharedKeywords.retainAll(ticketKeywords);
+
+        if (!requestKeywords.isEmpty() && sharedKeywords.isEmpty() && !sameIncidentLocation) {
+            return null;
+        }
+
+        int score = 0;
+        List<String> reasons = new ArrayList<>();
+
+        if (sameResource) {
+            score += 55;
+            reasons.add("Same resource");
+        }
+        if (sameIncidentLocation) {
+            score += 18;
+            reasons.add("Same exact incident location");
+        } else if (sameBaseLocation) {
+            score += 10;
+            reasons.add("Same asset base location");
+        }
+
+        score += 15;
+        reasons.add("Same category");
+
+        if (!sharedKeywords.isEmpty()) {
+            score += Math.min(24, sharedKeywords.size() * 8);
+            reasons.add("Shared keywords: " + String.join(", ", sharedKeywords.stream().limit(3).toList()));
+        }
+
+        if (ticket.getUpdatedAt() != null) {
+            if (!ticket.getUpdatedAt().isBefore(now.minusDays(3))) {
+                score += 15;
+                reasons.add("Updated within the last 3 days");
+            } else if (!ticket.getUpdatedAt().isBefore(now.minusDays(7))) {
+                score += 10;
+                reasons.add("Updated within the last week");
+            } else {
+                score += 5;
+                reasons.add("Updated within the last 14 days");
+            }
+        }
+
+        if (score < 65) {
+            return null;
+        }
+
+        boolean viewable = canViewDuplicate(principal, ticket);
+        return new DuplicateTicketMatchResponse(
+                ticket.getId(),
+                ticket.getTitle(),
+                ticket.getStatus(),
+                ticket.getResourceName(),
+                ticket.getIncidentLocation() == null || ticket.getIncidentLocation().isBlank() ? ticket.getResourceLocation() : ticket.getIncidentLocation(),
+                ticket.getUpdatedAt(),
+                score,
+                reasons,
+                viewable
+        );
+    }
+
+    private boolean canViewDuplicate(AuthUserPrincipal principal, Ticket ticket) {
+        if (principal.getRole() == UserRole.ADMIN) {
+            return true;
+        }
+        if (Objects.equals(principal.getPublicId(), ticket.getReporterId())) {
+            return true;
+        }
+        return principal.getRole() == UserRole.TECHNICIAN
+                && Objects.equals(principal.getPublicId(), ticket.getAssignedTechnicianId());
+    }
+
+    private void validateDuplicateCheckRequest(DuplicateTicketCheckRequest request) {
+        if (isBlank(request.resourceName()) || isBlank(request.resourceLocation()) || isBlank(request.incidentLocation())) {
+            throw new IllegalArgumentException("Resource and location context are required for duplicate detection.");
+        }
+    }
+
+    private Set<String> extractKeywords(String... values) {
+        return java.util.Arrays.stream(values)
+                .filter(Objects::nonNull)
+                .flatMap(value -> java.util.Arrays.stream(value.toLowerCase(Locale.ROOT).split("[^a-z0-9]+")))
+                .map(String::trim)
+                .filter(token -> token.length() >= 4)
+                .filter(token -> !DUPLICATE_STOP_WORDS.contains(token))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private void validateCreateRequest(CreateTicketRequest request) {
@@ -547,6 +799,88 @@ public class TicketService {
         if (body.trim().length() > 500) {
             throw new IllegalArgumentException("Comments must be 500 characters or fewer.");
         }
+    }
+
+    private void validateEvidenceLabels(List<String> evidenceLabels) {
+        if (evidenceLabels == null) {
+            return;
+        }
+        if (evidenceLabels.size() > 3) {
+            throw new IllegalArgumentException("Only up to 3 evidence references are allowed.");
+        }
+        Set<String> uniqueLabels = evidenceLabels.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(label -> !label.isBlank())
+                .map(label -> label.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        long nonBlankCount = evidenceLabels.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(label -> !label.isBlank())
+                .count();
+        if (uniqueLabels.size() != nonBlankCount) {
+            throw new IllegalArgumentException("Evidence references must be unique.");
+        }
+    }
+
+    private void appendEvidenceLabels(Ticket ticket, List<String> evidenceLabels) {
+        if (evidenceLabels == null) {
+            return;
+        }
+        evidenceLabels.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(label -> !label.isBlank())
+                .limit(3)
+                .forEach(label -> {
+                    TicketEvidence evidence = new TicketEvidence();
+                    evidence.setTicket(ticket);
+                    evidence.setLabel(label);
+                    ticket.getEvidenceItems().add(evidence);
+                });
+    }
+
+    private void validateSingleEvidenceUpload(String evidenceLabel, String evidenceDataUrl) {
+        boolean hasLabel = !isBlank(evidenceLabel);
+        boolean hasData = !isBlank(evidenceDataUrl);
+        if (!hasLabel && !hasData) {
+            return;
+        }
+        if (!hasLabel || !hasData) {
+            throw new IllegalArgumentException("Upload one complete photo or continue without a photo.");
+        }
+        if (evidenceLabel.trim().length() > 255) {
+            throw new IllegalArgumentException("Photo name must be 255 characters or fewer.");
+        }
+        String normalizedDataUrl = evidenceDataUrl.trim();
+        if (!normalizedDataUrl.startsWith("data:image/")) {
+            throw new IllegalArgumentException("Only image uploads are allowed for still-broken confirmation.");
+        }
+        if (!normalizedDataUrl.contains(";base64,")) {
+            throw new IllegalArgumentException("Image upload is incomplete. Please choose the photo again.");
+        }
+        if (normalizedDataUrl.length() > 2_500_000) {
+            throw new IllegalArgumentException("Photo is too large. Please upload a smaller image.");
+        }
+    }
+
+    private void appendReopenEvidence(Ticket ticket, String evidenceLabel, String evidenceDataUrl) {
+        if (isBlank(evidenceLabel) || isBlank(evidenceDataUrl)) {
+            return;
+        }
+        TicketEvidence evidence = new TicketEvidence();
+        evidence.setTicket(ticket);
+        evidence.setLabel(evidenceLabel.trim());
+        evidence.setReferenceUrl(evidenceDataUrl.trim());
+        ticket.getEvidenceItems().add(evidence);
+    }
+
+    private String buildReopenDetail(String note, String evidenceLabel) {
+        if (isBlank(evidenceLabel)) {
+            return note.trim();
+        }
+        return note.trim() + " Photo attached: " + evidenceLabel.trim() + ".";
     }
 
     private String fallbackActorName(String actorName, String fallback) {
@@ -724,9 +1058,6 @@ public class TicketService {
         return isBlank(value) ? null : value.trim();
     }
 }
-
-
-
 
 
 

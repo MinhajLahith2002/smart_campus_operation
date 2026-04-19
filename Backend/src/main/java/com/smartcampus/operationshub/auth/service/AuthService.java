@@ -1,7 +1,13 @@
 package com.smartcampus.operationshub.auth.service;
 
+<<<<<<< HEAD
+import com.smartcampus.operationshub.config.AuthProperties;
+import com.smartcampus.operationshub.config.AuthBootstrapSupport;
+import com.smartcampus.operationshub.common.ApiValidationException;
+=======
 import com.smartcampus.operationshub.auth.controller.ApiValidationException;
 import com.smartcampus.operationshub.auth.config.AuthProperties;
+>>>>>>> origin/main
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
@@ -102,6 +108,7 @@ public class AuthService {
 
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         String normalizedEmail = normalizeEmail(request.email());
+        AuthBootstrapSupport.ensureRelevantAccounts(normalizedEmail, authProperties, authUserRepository, passwordEncoder);
         AuthUser user = authUserRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password."));
 
