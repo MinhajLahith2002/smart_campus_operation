@@ -1,3 +1,8 @@
+/**
+ * Booking Module - REST Controller
+ * Handles booking lifecycle: create, approve, reject, cancel, conflict detection
+ * @author Aran (Member 2 - Booking Management)
+ */
 package com.smartcampus.operationshub.bookings.controller;
 
 import com.smartcampus.operationshub.bookings.dto.BookingDecisionRequest;
