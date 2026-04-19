@@ -1,3 +1,11 @@
+
+/**
+ * Booking Service - Business Logic Layer
+ * - Conflict detection (active + approved)
+ * - Status workflow management
+ * - Notification integration
+ * @author Aran (Member 2)
+ */
 package com.smartcampus.operationshub.bookings.service;
 
 import com.smartcampus.operationshub.auth.domain.UserRole;
