@@ -1,3 +1,7 @@
+/**
+ * Tracks all state changes for a booking record
+ * @author Aran (Member 2)
+ */
 package com.smartcampus.operationshub.bookings.repository;
 
 import com.smartcampus.operationshub.bookings.domain.BookingActivity;
