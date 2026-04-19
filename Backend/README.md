@@ -102,3 +102,24 @@ The admin bootstrap remains `ACTIVE`, `LOCAL`, and backend-controlled.
 - `/api/auth`
 - `/api/auth/admin`
 - `/api/module-c/tickets`
+## Booking Module (Member 2 - Aran)
+
+### Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/bookings | Get all bookings |
+| GET | /api/bookings/{id} | Get booking by ID |
+| GET | /api/bookings/upcoming | Get upcoming bookings |
+| GET | /api/bookings/check-availability | Check time slot availability |
+| POST | /api/bookings | Create new booking |
+| PUT | /api/bookings/{id} | Update pending booking |
+| PATCH | /api/bookings/{id}/approve | Approve booking |
+| PATCH | /api/bookings/{id}/reject | Reject booking |
+| PATCH | /api/bookings/{id}/cancel | Cancel booking |
+| PATCH | /api/bookings/{id}/request-cancel | Request cancellation |
+
+### Key Features
+- Conflict detection for overlapping bookings
+- Status workflow: PENDING → APPROVED/REJECTED → CANCELLED
+- Admin reason required for rejection
+- Cancellation request workflow
