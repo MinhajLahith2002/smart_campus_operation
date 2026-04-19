@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// Admin Bookings Management - Member 2 (Aran)
+// Features: approve, reject, cancel with reason modal
+// Displays cancellation requests separatelyimport React, { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { CalendarClock, CheckCircle2, CircleOff, History, MapPin, Users, X } from 'lucide-react';
 import { Card, Badge, Button, Input } from '../components/ui/Primitives';
@@ -334,7 +336,7 @@ const BookingCard = ({
           </div>
           <h3 className="text-xl font-semibold">{booking.resourceName}</h3>
           <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-            <p className="flex items-center gap-2"><CalendarClock size={14} /> {format(new Date(booking.bookingDate), 'MMM d, yyyy')} · {booking.startTime.slice(0, 5)} - {booking.endTime.slice(0, 5)}</p>
+            <p className="flex items-center gap-2"><CalendarClock size={14} /> {format(new Date(booking.bookingDate), 'MMM d, yyyy')} ï¿½ {booking.startTime.slice(0, 5)} - {booking.endTime.slice(0, 5)}</p>
             <p className="flex items-center gap-2"><Users size={14} /> {booking.attendees} attendees</p>
             <p className="flex items-center gap-2"><MapPin size={14} /> {booking.resourceLocation}</p>
           </div>
@@ -447,8 +449,8 @@ const AuditTrailModal = ({ booking, onClose }) => (
                   <p className="text-sm text-muted-foreground">{activity.detail}</p>
                   <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-muted-foreground/60">
                     <span className="text-foreground/80">{activity.actorName}</span>
-                    <span>·</span>
-                    <span>{format(new Date(activity.createdAt), 'MMM d, yyyy · HH:mm')}</span>
+                    <span>ï¿½</span>
+                    <span>{format(new Date(activity.createdAt), 'MMM d, yyyy ï¿½ HH:mm')}</span>
                   </div>
                 </div>
               </div>

@@ -1,3 +1,7 @@
+
+/**
+ * @author Aran (Member 2 - Booking Management)
+ */
 package com.smartcampus.operationshub.bookings.repository;
 
 import com.smartcampus.operationshub.bookings.domain.BookingRecord;
@@ -11,4 +15,6 @@ public interface BookingRecordRepository extends JpaRepository<BookingRecord, Lo
     List<BookingRecord> findByBookingDateAndResourceId(LocalDate bookingDate, Long resourceId);
     long countByStatus(BookingStatus status);
     long countByCancellationRequestedAtIsNotNull();
+    
 }
+
