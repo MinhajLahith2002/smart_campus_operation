@@ -25,7 +25,7 @@ public class TicketEvidence {
     @Column(nullable = false, length = 255)
     private String label;
 
-    @Column(length = 2000)
+    @Column(columnDefinition = "TEXT")
     private String referenceUrl;
 
     public Long getId() { return id; }

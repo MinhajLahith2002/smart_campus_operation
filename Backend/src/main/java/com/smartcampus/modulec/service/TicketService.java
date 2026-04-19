@@ -177,13 +177,16 @@ public class TicketService {
 
     public void deleteTicket(@NonNull Long ticketId, TicketDecisionRequest request, AuthUserPrincipal principal) {
         Ticket ticket = findTicket(ticketId);
-        ensureEditableByReporter(ticket, principal.getPublicId(), principal.getRole(), "Only the original reporter can delete an open ticket.");
+        ensureCanDeleteTicket(ticket, principal.getPublicId(), principal.getRole(), "Only the original reporter or an admin can delete this ticket.");
         ticketRepository.delete(ticket);
     }
 
     public TicketResponse assignTechnician(Long ticketId, AssignTechnicianRequest request, AuthUserPrincipal principal) {
         Ticket ticket = findTicket(ticketId);
         ensureAdmin(principal.getRole(), "Only admins can assign technicians.");
+        validateAssignment(request);
+        ensureAssignable(ticket);
+        ensureNoDuplicateDispatchConflict(ticket);
 
         AuthUser technician = authUserRepository.findByPublicId(request.technicianId())
                 .orElseThrow(() -> new IllegalArgumentException("Selected technician was not found."));
@@ -196,9 +199,7 @@ public class TicketService {
         ticket.setAssignedTechnicianName(technician.getFullName());
         ticket.setAssignedByName(fallbackActorName(principal.getFullName(), "Operations Desk"));
         ticket.setAssignedAt(now);
-        if (ticket.getStatus() != TicketStatus.RESOLVED && ticket.getStatus() != TicketStatus.CLOSED && ticket.getStatus() != TicketStatus.REJECTED) {
-            ticket.setStatus(TicketStatus.ASSIGNED);
-        }
+        ticket.setStatus(TicketStatus.ASSIGNED);
         ticket.setUpdatedAt(now);
         addActivity(ticket, principal.getFullName(), principal.getRole(), "TECHNICIAN_ASSIGNED",
                 "Assigned to " + technician.getFullName() + " (" + technician.getPublicId() + ").");
@@ -288,14 +289,27 @@ public class TicketService {
         if (isBlank(request.note())) {
             throw new IllegalArgumentException("A reopen note is required when reporting the issue as still broken.");
         }
+        validateSingleEvidenceUpload(request.evidenceLabel(), request.evidenceDataUrl());
 
+        OffsetDateTime now = OffsetDateTime.now();
         ticket.setStatus(TicketStatus.OPEN);
-        ticket.setUpdatedAt(OffsetDateTime.now());
+        ticket.setAssignedTechnicianId(null);
+        ticket.setAssignedTechnicianName(null);
+        ticket.setAssignedByName(null);
+        ticket.setAssignedAt(null);
+        ticket.setTechnicianStartedByName(null);
+        ticket.setTechnicianStartedAt(null);
+        ticket.setResolvedByName(null);
+        ticket.setResolvedAt(null);
+        ticket.setClosedByName(null);
+        ticket.setClosedAt(null);
+        ticket.setUpdatedAt(now);
+        appendReopenEvidence(ticket, request.evidenceLabel(), request.evidenceDataUrl());
         addActivity(ticket,
                 principal.getFullName(),
                 principal.getRole(),
                 "TICKET_REOPENED",
-                request.note().trim());
+                buildReopenDetail(request.note(), request.evidenceLabel()));
 
         return map(ticketRepository.save(ticket));
     }
@@ -433,6 +447,23 @@ public class TicketService {
         }
     }
 
+    private void ensureCanDeleteTicket(Ticket ticket, String actorId, UserRole actorRole, String message) {
+        if (actorRole == UserRole.ADMIN) {
+            return;
+        }
+        if (actorRole != UserRole.STUDENT && actorRole != UserRole.STAFF) {
+            throw new SecurityException(message);
+        }
+        if (actorId == null || !actorId.equals(ticket.getReporterId())) {
+            throw new SecurityException(message);
+        }
+        if (ticket.getStatus() != TicketStatus.OPEN
+                && ticket.getStatus() != TicketStatus.CLOSED
+                && ticket.getStatus() != TicketStatus.REJECTED) {
+            throw new IllegalArgumentException("Only open, closed, or rejected tickets can be deleted by the reporter.");
+        }
+    }
+
     private void ensureCanView(Ticket ticket, String actorId, UserRole actorRole, String message) {
         if (actorRole == UserRole.ADMIN) return;
         if (actorRole == UserRole.TECHNICIAN && actorId != null && actorId.equals(ticket.getAssignedTechnicianId())) return;
@@ -444,6 +475,85 @@ public class TicketService {
         if (ticket.getStatus() == TicketStatus.CLOSED || ticket.getStatus() == TicketStatus.REJECTED) {
             throw new IllegalArgumentException("Comments are disabled for closed or rejected tickets.");
         }
+    }
+
+    private void ensureAssignable(Ticket ticket) {
+        if (ticket.getStatus() == TicketStatus.IN_PROGRESS) {
+            throw new IllegalArgumentException("This ticket is already in progress, so technician reassignment is locked.");
+        }
+        if (ticket.getStatus() == TicketStatus.RESOLVED || ticket.getStatus() == TicketStatus.CLOSED || ticket.getStatus() == TicketStatus.REJECTED) {
+            throw new IllegalArgumentException("Only open, triaged, or assigned tickets can receive a technician assignment.");
+        }
+    }
+
+    private void ensureNoDuplicateDispatchConflict(Ticket ticket) {
+        List<Ticket> similarActiveTickets = ticketRepository.findAll().stream()
+                .filter(other -> !Objects.equals(other.getId(), ticket.getId()))
+                .filter(other -> ACTIVE_DUPLICATE_STATUSES.contains(other.getStatus()))
+                .filter(other -> isLikelySameIncident(ticket, other))
+                .sorted(Comparator.comparing(Ticket::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(Ticket::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+
+        Ticket dispatchedDuplicate = similarActiveTickets.stream()
+                .filter(other -> other.getStatus() == TicketStatus.ASSIGNED || other.getStatus() == TicketStatus.IN_PROGRESS)
+                .findFirst()
+                .orElse(null);
+        if (dispatchedDuplicate != null) {
+            String assignedTechnician = isBlank(dispatchedDuplicate.getAssignedTechnicianName()) ? "another technician" : dispatchedDuplicate.getAssignedTechnicianName();
+            throw new IllegalArgumentException("A similar active ticket (#" + dispatchedDuplicate.getId() + ") is already owned by " + assignedTechnician + ". Reject or close the duplicate instead of dispatching a second technician.");
+        }
+
+        Ticket canonicalTicket = similarActiveTickets.stream().findFirst().orElse(null);
+        if (canonicalTicket != null && shouldPreferCanonicalTicket(canonicalTicket, ticket)) {
+            throw new IllegalArgumentException("A similar active ticket (#" + canonicalTicket.getId() + ") already exists for this issue. Assign the technician to that ticket and reject this duplicate to avoid splitting the same problem across multiple cases.");
+        }
+    }
+
+    private boolean shouldPreferCanonicalTicket(Ticket canonicalTicket, Ticket currentTicket) {
+        OffsetDateTime canonicalCreatedAt = canonicalTicket.getCreatedAt();
+        OffsetDateTime currentCreatedAt = currentTicket.getCreatedAt();
+        if (canonicalCreatedAt != null && currentCreatedAt != null && canonicalCreatedAt.isBefore(currentCreatedAt)) {
+            return true;
+        }
+        if (canonicalCreatedAt != null && currentCreatedAt == null) {
+            return true;
+        }
+        if (canonicalCreatedAt == null && currentCreatedAt != null) {
+            return false;
+        }
+        Long canonicalId = canonicalTicket.getId();
+        Long currentId = currentTicket.getId();
+        if (canonicalId == null || currentId == null) {
+            return false;
+        }
+        return canonicalId < currentId;
+    }
+
+    private boolean isLikelySameIncident(Ticket first, Ticket second) {
+        if (first.getCategory() != second.getCategory()) {
+            return false;
+        }
+
+        String firstResourceName = normalise(first.getResourceName());
+        String secondResourceName = normalise(second.getResourceName());
+        String firstResourceLocation = normalise(first.getResourceLocation());
+        String secondResourceLocation = normalise(second.getResourceLocation());
+        String firstIncidentLocation = normalise(first.getIncidentLocation());
+        String secondIncidentLocation = normalise(second.getIncidentLocation());
+
+        boolean sameResource = !firstResourceName.isBlank() && firstResourceName.equals(secondResourceName);
+        boolean sameIncidentLocation = !firstIncidentLocation.isBlank() && firstIncidentLocation.equals(secondIncidentLocation);
+        boolean sameBaseLocation = !firstResourceLocation.isBlank() && firstResourceLocation.equals(secondResourceLocation);
+        if (!(sameResource || sameIncidentLocation || sameBaseLocation)) {
+            return false;
+        }
+
+        Set<String> firstKeywords = extractKeywords(first.getTitle(), first.getDescription(), first.getOperationalImpact());
+        Set<String> secondKeywords = extractKeywords(second.getTitle(), second.getDescription(), second.getOperationalImpact());
+        Set<String> sharedKeywords = new LinkedHashSet<>(firstKeywords);
+        sharedKeywords.retainAll(secondKeywords);
+        return sameIncidentLocation || !sharedKeywords.isEmpty();
     }
 
     private void ensureStatusPermission(Ticket ticket, String actorId, UserRole actorRole, TicketStatus nextStatus) {
@@ -691,6 +801,88 @@ public class TicketService {
         }
     }
 
+    private void validateEvidenceLabels(List<String> evidenceLabels) {
+        if (evidenceLabels == null) {
+            return;
+        }
+        if (evidenceLabels.size() > 3) {
+            throw new IllegalArgumentException("Only up to 3 evidence references are allowed.");
+        }
+        Set<String> uniqueLabels = evidenceLabels.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(label -> !label.isBlank())
+                .map(label -> label.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        long nonBlankCount = evidenceLabels.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(label -> !label.isBlank())
+                .count();
+        if (uniqueLabels.size() != nonBlankCount) {
+            throw new IllegalArgumentException("Evidence references must be unique.");
+        }
+    }
+
+    private void appendEvidenceLabels(Ticket ticket, List<String> evidenceLabels) {
+        if (evidenceLabels == null) {
+            return;
+        }
+        evidenceLabels.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(label -> !label.isBlank())
+                .limit(3)
+                .forEach(label -> {
+                    TicketEvidence evidence = new TicketEvidence();
+                    evidence.setTicket(ticket);
+                    evidence.setLabel(label);
+                    ticket.getEvidenceItems().add(evidence);
+                });
+    }
+
+    private void validateSingleEvidenceUpload(String evidenceLabel, String evidenceDataUrl) {
+        boolean hasLabel = !isBlank(evidenceLabel);
+        boolean hasData = !isBlank(evidenceDataUrl);
+        if (!hasLabel && !hasData) {
+            return;
+        }
+        if (!hasLabel || !hasData) {
+            throw new IllegalArgumentException("Upload one complete photo or continue without a photo.");
+        }
+        if (evidenceLabel.trim().length() > 255) {
+            throw new IllegalArgumentException("Photo name must be 255 characters or fewer.");
+        }
+        String normalizedDataUrl = evidenceDataUrl.trim();
+        if (!normalizedDataUrl.startsWith("data:image/")) {
+            throw new IllegalArgumentException("Only image uploads are allowed for still-broken confirmation.");
+        }
+        if (!normalizedDataUrl.contains(";base64,")) {
+            throw new IllegalArgumentException("Image upload is incomplete. Please choose the photo again.");
+        }
+        if (normalizedDataUrl.length() > 2_500_000) {
+            throw new IllegalArgumentException("Photo is too large. Please upload a smaller image.");
+        }
+    }
+
+    private void appendReopenEvidence(Ticket ticket, String evidenceLabel, String evidenceDataUrl) {
+        if (isBlank(evidenceLabel) || isBlank(evidenceDataUrl)) {
+            return;
+        }
+        TicketEvidence evidence = new TicketEvidence();
+        evidence.setTicket(ticket);
+        evidence.setLabel(evidenceLabel.trim());
+        evidence.setReferenceUrl(evidenceDataUrl.trim());
+        ticket.getEvidenceItems().add(evidence);
+    }
+
+    private String buildReopenDetail(String note, String evidenceLabel) {
+        if (isBlank(evidenceLabel)) {
+            return note.trim();
+        }
+        return note.trim() + " Photo attached: " + evidenceLabel.trim() + ".";
+    }
+
     private String fallbackActorName(String actorName, String fallback) {
         return actorName == null || actorName.isBlank() ? fallback : actorName.trim();
     }
@@ -866,9 +1058,6 @@ public class TicketService {
         return isBlank(value) ? null : value.trim();
     }
 }
-
-
-
 
 
 

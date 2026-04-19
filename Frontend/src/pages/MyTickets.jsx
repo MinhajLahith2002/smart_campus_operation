@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { AlertCircle, ChevronRight, Clock, MapPin, MessageSquareMore, Paperclip, Ticket as TicketIcon, Wrench } from 'lucide-react';
+import { AlertCircle, ChevronRight, Clock, MapPin, MessageSquareMore, Paperclip, Ticket as TicketIcon, Trash2, Wrench } from 'lucide-react';
 import { Card, Badge, Button } from '../components/ui/Primitives';
 import { cn } from '../lib/utils';
-import { getTickets } from '../lib/moduleCApi';
+import { deleteTicket, getTickets, toBackendRole } from '../lib/moduleCApi';
 import { formatTicketStatusLabel, statusBadgeVariant } from '../lib/moduleCLabels';
 import { useAuth } from '../context/AuthContext';
 
@@ -16,26 +16,48 @@ export const MyTickets = () => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [deletingTicketId, setDeletingTicketId] = useState(null);
+
+  const loadTickets = async (ignore = false) => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = await getTickets({ role: user?.role, userId: user?.id });
+      if (!ignore) setTickets(data);
+    } catch (err) {
+      if (!ignore) setError(err.message || 'Unable to load your tickets.');
+    } finally {
+      if (!ignore) setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let ignore = false;
-
-    const loadTickets = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        const data = await getTickets({ role: user?.role, userId: user?.id });
-        if (!ignore) setTickets(data);
-      } catch (err) {
-        if (!ignore) setError(err.message || 'Unable to load your tickets.');
-      } finally {
-        if (!ignore) setLoading(false);
-      }
-    };
-
     if (user) loadTickets();
     return () => { ignore = true; };
   }, [user]);
+
+  const handleDeleteTicket = async (ticket) => {
+    const confirmed = window.confirm('Delete this ticket permanently? This removes the whole ticket record and cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      setDeletingTicketId(ticket.id);
+      setActionError('');
+      await deleteTicket(ticket.id, {
+        actorId: user.id,
+        actorName: user.name,
+        actorRole: toBackendRole(user.role),
+        note: 'Reporter permanently deleted the full ticket record from the ticket list.',
+      });
+      await loadTickets();
+    } catch (err) {
+      setActionError(err.message || 'Unable to delete this ticket.');
+    } finally {
+      setDeletingTicketId(null);
+    }
+  };
 
   const activeTickets = useMemo(
     () => tickets.filter((ticket) => !['CLOSED', 'REJECTED'].includes(ticket.status)),
@@ -137,6 +159,7 @@ export const MyTickets = () => {
       </Card>
 
       {error && <Card className="border-danger/30 bg-danger/5 p-5 text-sm text-danger">{error}</Card>}
+      {actionError && <Card className="border-danger/30 bg-danger/5 p-5 text-sm text-danger">{actionError}</Card>}
 
       {loading ? (
         <Card className="p-8 text-sm text-muted-foreground">Loading ticket history...</Card>
@@ -149,7 +172,13 @@ export const MyTickets = () => {
             </div>
             <div className="grid grid-cols-1 gap-4">
               {filteredActiveTickets.map((ticket) => (
-                <TicketListCard key={ticket.id} ticket={ticket} onOpen={() => navigate(`/tickets/${ticket.id}`)} />
+                <TicketListCard
+                  key={ticket.id}
+                  ticket={ticket}
+                  onOpen={() => navigate(`/tickets/${ticket.id}`)}
+                  onDelete={() => handleDeleteTicket(ticket)}
+                  deleting={deletingTicketId === ticket.id}
+                />
               ))}
 
               {!filteredActiveTickets.length && (
@@ -165,7 +194,14 @@ export const MyTickets = () => {
             </div>
             <div className="grid grid-cols-1 gap-4">
               {filteredArchiveTickets.map((ticket) => (
-                <TicketListCard key={ticket.id} ticket={ticket} onOpen={() => navigate(`/tickets/${ticket.id}`)} archived />
+                <TicketListCard
+                  key={ticket.id}
+                  ticket={ticket}
+                  onOpen={() => navigate(`/tickets/${ticket.id}`)}
+                  onDelete={() => handleDeleteTicket(ticket)}
+                  deleting={deletingTicketId === ticket.id}
+                  archived
+                />
               ))}
 
               {!filteredArchiveTickets.length && (
@@ -187,17 +223,18 @@ const MetricCard = ({ label, value }) => (
 );
 
 const InfoTile = ({ title, icon, copy }) => (
-  <div className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
+  <div className="min-w-0 rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
     <div className="mb-2 flex items-center gap-2 font-semibold">
       {icon}
       {title}
     </div>
-    <p className="text-sm leading-7 text-muted-foreground">{copy}</p>
+    <p className="overflow-hidden break-words text-sm leading-7 text-muted-foreground [overflow-wrap:anywhere]">{copy}</p>
   </div>
 );
 
-const TicketListCard = ({ ticket, onOpen, archived = false }) => {
+const TicketListCard = ({ ticket, onOpen, onDelete, deleting = false, archived = false }) => {
   const latestActivity = ticket.activities?.[ticket.activities.length - 1];
+  const canDelete = archived && ['CLOSED', 'REJECTED'].includes(ticket.status);
 
   return (
     <Card className="overflow-hidden p-0 transition-all hover:border-primary/30">
@@ -237,9 +274,16 @@ const TicketListCard = ({ ticket, onOpen, archived = false }) => {
               </div>
             </div>
 
-            <Button variant="ghost" className="gap-2 xl:self-center" onClick={onOpen}>
-              View Details <ChevronRight size={18} />
-            </Button>
+            <div className="flex flex-col gap-2 xl:self-center">
+              <Button variant="ghost" className="gap-2" onClick={onOpen}>
+                View Details <ChevronRight size={18} />
+              </Button>
+              {canDelete && (
+                <Button variant="outline" className="gap-2" onClick={onDelete} isLoading={deleting}>
+                  <Trash2 size={16} /> Delete Ticket
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-4">

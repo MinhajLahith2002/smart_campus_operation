@@ -41,6 +41,9 @@ export const TicketDetailPage = () => {
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [lightboxItem, setLightboxItem] = useState(null);
   const [technicians, setTechnicians] = useState([]);
+  const [stillBrokenModalOpen, setStillBrokenModalOpen] = useState(false);
+  const [stillBrokenNote, setStillBrokenNote] = useState('The issue still persists after the reported fix.');
+  const [stillBrokenPhoto, setStillBrokenPhoto] = useState(null);
 
   const loadTicket = async () => {
     try {
@@ -61,6 +64,8 @@ export const TicketDetailPage = () => {
   const isAdmin = user?.role === 'ADMIN';
   const isTechnician = user?.role === 'TECHNICIAN' && user?.id === ticket?.assignedTechnicianId;
   const canComment = ticket && ['OPEN', 'IN_PROGRESS', 'RESOLVED'].includes(ticket.status) && (isReporter || isAdmin || isTechnician);
+  const canReporterDelete = isReporter && ['CLOSED', 'REJECTED'].includes(ticket?.status);
+  const canAdminDelete = isAdmin && ['CLOSED', 'REJECTED'].includes(ticket?.status);
   const healthScore = maintenanceHealth({
     similarCount: Number(ticket?.similarOpenIncidents || 0),
     priority: ticket?.priority || 'LOW',
@@ -151,16 +156,18 @@ export const TicketDetailPage = () => {
   const handleEditTicket = () => navigate(`/tickets/${ticket.id}/edit`);
 
   const handleDeleteTicket = () => {
-    const confirmed = window.confirm('Delete this open ticket? This action cannot be undone.');
+    const confirmed = window.confirm('Delete this ticket permanently? This removes the whole ticket record and cannot be undone.');
     if (!confirmed) return;
     runAction('delete-ticket', async () => {
       await deleteTicket(ticket.id, {
         actorId: user.id,
         actorName: user.name,
         actorRole: toBackendRole(user.role),
-        note: 'Reporter deleted the open ticket before workflow action began.',
+        note: isAdmin
+          ? 'Admin permanently deleted the full ticket record.'
+          : 'Reporter permanently deleted the full ticket record.',
       });
-      navigate('/tickets/my');
+      navigate(isAdmin ? '/admin/tickets' : '/tickets/my');
     });
   };
 
@@ -171,15 +178,57 @@ export const TicketDetailPage = () => {
     note: 'Reporter confirmed the fix and closed the ticket.',
   }));
 
-  const handleStillBroken = () => {
-    const note = window.prompt('Describe what is still broken', 'The issue still persists after the reported fix.');
-    if (!note) return;
-    runAction('reopen', () => reopenTicket(ticket.id, {
-      actorId: user.id,
-      actorName: user.name,
-      actorRole: toBackendRole(user.role),
-      note,
-    }));
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(new Error('Unable to read the selected photo.'));
+    reader.readAsDataURL(file);
+  });
+
+  const openStillBrokenModal = () => {
+    setStillBrokenNote('The issue still persists after the reported fix.');
+    setStillBrokenPhoto(null);
+    setStillBrokenModalOpen(true);
+  };
+
+  const closeStillBrokenModal = () => {
+    if (busyAction === 'reopen') return;
+    setStillBrokenModalOpen(false);
+    setStillBrokenPhoto(null);
+  };
+
+  const handleStillBrokenEvidenceChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setStillBrokenPhoto(null);
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setStillBrokenPhoto({ name: file.name, dataUrl });
+    } catch (err) {
+      setActionError(err.message || 'Unable to read the selected photo.');
+    }
+  };
+
+  const submitStillBrokenReport = () => {
+    if (!stillBrokenNote.trim()) {
+      setActionError('Add a short note about what is still broken before reopening the ticket.');
+      return;
+    }
+
+    runAction('reopen', async () => {
+      await reopenTicket(ticket.id, {
+        actorId: user.id,
+        actorName: user.name,
+        actorRole: toBackendRole(user.role),
+        note: stillBrokenNote.trim(),
+        evidenceLabel: stillBrokenPhoto?.name || '',
+        evidenceDataUrl: stillBrokenPhoto?.dataUrl || '',
+      });
+      setStillBrokenModalOpen(false);
+      setStillBrokenPhoto(null);
+    });
   };
 
   const handleTechnicianProgress = (status) => runAction(status, () => updateTicketStatus(ticket.id, {
@@ -400,7 +449,7 @@ export const TicketDetailPage = () => {
                 <div key={activity.id} className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
                   <p className="font-semibold text-foreground">{activity.action.replace('_', ' ')}</p>
                   <p className="mt-1">{activity.detail}</p>
-                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} · {activity.actorRole}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} ï¿½ {activity.actorRole}</p>
                 </div>
               ))}
             </div>
@@ -440,7 +489,7 @@ export const TicketDetailPage = () => {
                       <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${badgeClass}`}>{index + 1}</div>
                       <div>
                         <p className="text-sm font-semibold">{step.title}</p>
-                        <p className="text-xs text-muted-foreground">{step.owner} · {statusCopy}</p>
+                        <p className="text-xs text-muted-foreground">{step.owner} ï¿½ {statusCopy}</p>
                       </div>
                     </div>
                   </div>
@@ -455,13 +504,15 @@ export const TicketDetailPage = () => {
               {isReporter && ticket.status === 'OPEN' && (
                 <>
                   <Button className="w-full gap-2" onClick={handleEditTicket}>Edit Ticket</Button>
-                  <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'delete-ticket'} onClick={handleDeleteTicket}>Delete Ticket</Button>
                 </>
+              )}
+              {(canReporterDelete || canAdminDelete) && (
+                <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'delete-ticket'} onClick={handleDeleteTicket}>Delete Ticket</Button>
               )}
               {isReporter && ticket.status === 'RESOLVED' && (
                 <>
                   <Button className="w-full gap-2" isLoading={busyAction === 'close'} onClick={handleConfirmFixed}>Confirm Fixed</Button>
-                  <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'reopen'} onClick={handleStillBroken}>Report Still Broken</Button>
+                  <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'reopen'} onClick={openStillBrokenModal}>Report Still Broken</Button>
                 </>
               )}
               {isAdmin && ticket.status !== 'REJECTED' && (
@@ -488,6 +539,51 @@ export const TicketDetailPage = () => {
           </Card>
         </div>
       </div>
+
+
+      {stillBrokenModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/82 p-4 backdrop-blur-sm" onClick={closeStillBrokenModal}>
+          <div className="w-full max-w-lg rounded-[24px] border border-white/10 bg-slate-950 text-slate-50 shadow-[0_24px_90px_rgba(15,23,42,0.48)]" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Report the issue as still broken</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-300">Give a reason and optionally upload one photo.</p>
+              </div>
+              <Button variant="ghost" size="icon" className="shrink-0 border border-white/10 text-slate-200 hover:bg-white/10" onClick={closeStillBrokenModal}><X size={18} /></Button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-white">Reason</label>
+                <textarea
+                  className="min-h-[120px] w-full rounded-2xl border border-white/12 bg-slate-900/90 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-400/60"
+                  value={stillBrokenNote}
+                  onChange={(event) => setStillBrokenNote(event.target.value)}
+                  placeholder="Explain what is still broken."
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-white">Upload photo (optional)</label>
+                <label htmlFor="still-broken-evidence" className="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-sm text-slate-200 transition hover:bg-white/10">
+                  <span className="flex items-center gap-2">
+                    <Paperclip size={16} />
+                    Choose photo
+                  </span>
+                  <span className="text-xs text-slate-400">One image</span>
+                </label>
+                <input id="still-broken-evidence" type="file" accept="image/*" onChange={handleStillBrokenEvidenceChange} className="hidden" />
+                {stillBrokenPhoto && <p className="mt-2 text-sm text-cyan-200">Selected: {stillBrokenPhoto.name}</p>}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-white/10 px-5 py-4">
+              <Button variant="outline" className="border-white/15 bg-transparent text-slate-100 hover:bg-white/10" onClick={closeStillBrokenModal}>Cancel</Button>
+              <Button className="min-w-[150px]" isLoading={busyAction === 'reopen'} onClick={submitStillBrokenReport}>Submit</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {lightboxItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-6" onClick={() => setLightboxItem(null)}>
@@ -533,8 +629,6 @@ const InlineRow = ({ icon, label, value }) => (
     <span className="text-sm font-semibold text-white">{value}</span>
   </div>
 );
-
-
 
 
 

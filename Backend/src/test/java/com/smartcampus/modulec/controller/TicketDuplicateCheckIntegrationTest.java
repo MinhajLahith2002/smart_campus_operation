@@ -1,8 +1,11 @@
 package com.smartcampus.modulec.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -30,6 +33,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -50,6 +54,9 @@ class TicketDuplicateCheckIntegrationTest {
     private AuthUserRepository authUserRepository;
 
     @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Autowired
@@ -62,6 +69,9 @@ class TicketDuplicateCheckIntegrationTest {
     private AuthMailService authMailService;
 
     private AuthUser student;
+    private AuthUser admin;
+    private AuthUser technicianOne;
+    private AuthUser technicianTwo;
 
     @BeforeEach
     void setUp() {
@@ -73,6 +83,9 @@ class TicketDuplicateCheckIntegrationTest {
                 .filter(user -> !"admin@campus.edu".equalsIgnoreCase(user.getEmail()))
                 .forEach(authUserRepository::delete);
         student = saveUser("student-duplicate", "student.duplicate@campus.edu", "Duplicate Student", UserRole.STUDENT);
+        admin = saveUser("admin-duplicate", "ops.admin@campus.edu", "Ops Admin", UserRole.ADMIN);
+        technicianOne = saveUser("tech-one", "tech.one@campus.edu", "Kasun Silva", UserRole.TECHNICIAN);
+        technicianTwo = saveUser("tech-two", "tech.two@campus.edu", "Nuwan Silva", UserRole.TECHNICIAN);
     }
 
     @Test
@@ -123,6 +136,121 @@ class TicketDuplicateCheckIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()", is(0)));
+    }
+
+    @Test
+    void reporterCanReopenResolvedTicketWithOptionalUploadedPhoto() throws Exception {
+        Ticket resolved = saveTicket(student, TicketStatus.RESOLVED, OffsetDateTime.now().minusHours(1));
+        resolved.setAssignedTechnicianId(technicianOne.getPublicId());
+        resolved.setAssignedTechnicianName(technicianOne.getFullName());
+        resolved.setResolvedByName(technicianOne.getFullName());
+        resolved.setResolvedAt(OffsetDateTime.now().minusMinutes(25));
+        resolved.setResolutionNotes("Replaced the projector cable and verified the image output.");
+        resolved = ticketRepository.save(resolved);
+
+        mockMvc.perform(patch("/api/module-c/tickets/{ticketId}/reopen", resolved.getId())
+                        .with(authentication(authFor(student)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "actorId":"student-duplicate",
+                                  "actorName":"Duplicate Student",
+                                  "actorRole":"STUDENT",
+                                  "note":"The projector still goes black after a few minutes of use.",
+                                  "evidenceLabel":"still-broken-front.png",
+                                  "evidenceDataUrl":"data:image/png;base64,aGVsbG8="
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("OPEN")))
+                .andExpect(jsonPath("$.assignedTechnicianId").isEmpty())
+                .andExpect(jsonPath("$.assignedTechnicianName").isEmpty())
+                .andExpect(jsonPath("$.assignedAt").isEmpty())
+                .andExpect(jsonPath("$.technicianStartedAt").isEmpty())
+                .andExpect(jsonPath("$.resolvedAt").isEmpty())
+                .andExpect(jsonPath("$.evidenceLabels", hasItem("still-broken-front.png")))
+                .andExpect(jsonPath("$.activities[*].detail", hasItem(containsString("Photo attached: still-broken-front.png"))));
+
+        Integer evidenceCount = jdbcTemplate.queryForObject(
+                "select count(*) from ticket_evidence where ticket_id = ? and label = ?",
+                Integer.class,
+                resolved.getId(),
+                "still-broken-front.png");
+        String storedDataUrl = jdbcTemplate.queryForObject(
+                "select reference_url from ticket_evidence where ticket_id = ? and label = ? order by id desc limit 1",
+                String.class,
+                resolved.getId(),
+                "still-broken-front.png");
+        org.junit.jupiter.api.Assertions.assertEquals(1, evidenceCount);
+        org.junit.jupiter.api.Assertions.assertTrue(storedDataUrl != null && storedDataUrl.startsWith("data:image/png;base64,"));
+    }
+
+    @Test
+    void adminCannotAssignTechnicianToDuplicateWhenAnotherMatchingTicketAlreadyAssigned() throws Exception {
+        Ticket canonical = saveTicket(student, TicketStatus.ASSIGNED, OffsetDateTime.now().minusHours(4));
+        canonical.setAssignedTechnicianId(technicianOne.getPublicId());
+        canonical.setAssignedTechnicianName(technicianOne.getFullName());
+        canonical.setAssignedByName(admin.getFullName());
+        canonical.setAssignedAt(OffsetDateTime.now().minusHours(3));
+        ticketRepository.save(canonical);
+
+        Ticket duplicate = saveTicket(student, TicketStatus.OPEN, OffsetDateTime.now().minusHours(1));
+
+        mockMvc.perform(patch("/api/module-c/tickets/{ticketId}/assign", duplicate.getId())
+                        .with(authentication(authFor(admin)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "technicianId":"tech-two",
+                                  "technicianName":"Nuwan Silva",
+                                  "actorName":"Ops Admin",
+                                  "actorId":"admin-duplicate",
+                                  "actorRole":"ADMIN"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("already owned by Kasun Silva")))
+                .andExpect(jsonPath("$.message", containsString("#" + canonical.getId())));
+    }
+
+    @Test
+    void adminCanDeleteEntireTicketRecord() throws Exception {
+        Ticket ticket = saveTicket(student, TicketStatus.IN_PROGRESS, OffsetDateTime.now().minusMinutes(30));
+
+        mockMvc.perform(delete("/api/module-c/tickets/{ticketId}", ticket.getId())
+                        .with(authentication(authFor(admin)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "actorId":"admin-duplicate",
+                                  "actorName":"Ops Admin",
+                                  "actorRole":"ADMIN",
+                                  "note":"Admin removed the entire ticket record."
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        org.junit.jupiter.api.Assertions.assertFalse(ticketRepository.findById(ticket.getId()).isPresent());
+    }
+
+    @Test
+    void reporterCanDeleteClosedTicketFromOwnHistory() throws Exception {
+        Ticket ticket = saveTicket(student, TicketStatus.CLOSED, OffsetDateTime.now().minusMinutes(20));
+
+        mockMvc.perform(delete("/api/module-c/tickets/{ticketId}", ticket.getId())
+                        .with(authentication(authFor(student)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "actorId":"student-duplicate",
+                                  "actorName":"Duplicate Student",
+                                  "actorRole":"STUDENT",
+                                  "note":"Reporter removed this closed ticket from history."
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        org.junit.jupiter.api.Assertions.assertFalse(ticketRepository.findById(ticket.getId()).isPresent());
     }
 
     private UsernamePasswordAuthenticationToken authFor(AuthUser user) {

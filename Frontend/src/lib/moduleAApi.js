@@ -1,6 +1,8 @@
 import { toBackendRole } from './moduleCApi';
 
-export const MODULE_A_API_BASE = import.meta.env.VITE_MODULE_A_API_URL || 'http://localhost:8082/api/module-a/resources';
+const BACKEND_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8081';
+
+export const MODULE_A_API_BASE = import.meta.env.VITE_MODULE_A_API_URL || `${BACKEND_BASE}/api/module-a/resources`;
 export const RESOURCE_TYPES = ['LAB', 'HALL', 'MEETING_ROOM', 'EQUIPMENT'];
 export const RESOURCE_STATUSES = ['ACTIVE', 'OUT_OF_SERVICE'];
 export const RESOURCE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -98,4 +100,3 @@ export const formatAvailabilityWindow = (availabilityWindow = {}) => {
   const dayLabel = days.length === RESOURCE_DAYS.length ? 'Daily' : days.join(', ');
   return `${dayLabel} - ${availabilityWindow.openTime || '--:--'} to ${availabilityWindow.closeTime || '--:--'}`;
 };
-
