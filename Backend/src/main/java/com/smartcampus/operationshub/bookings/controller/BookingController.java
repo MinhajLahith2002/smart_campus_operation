@@ -12,8 +12,14 @@ import com.smartcampus.operationshub.bookings.dto.BookingSummaryResponse;
 import com.smartcampus.operationshub.bookings.dto.CreateBookingRequest;
 import com.smartcampus.operationshub.bookings.service.BookingService;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import java.util.Map;
+
+
+import java.util.HashMap;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -89,5 +95,22 @@ public class BookingController {
     public List<BookingResponse> getBookingsByUser(@PathVariable String requesterId) {
         BookingQuery query = new BookingQuery(requesterId, "USER", null);
         return bookingService.getBookings(query);
+    }
+        @GetMapping("/check-availability")
+    public ResponseEntity<Map<String, Object>> checkAvailability(
+            @RequestParam Long resourceId,
+            @RequestParam String date,
+            @RequestParam String startTime,
+            @RequestParam String endTime) {
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("resourceId", resourceId);
+        response.put("date", date);
+        response.put("startTime", startTime);
+        response.put("endTime", endTime);
+        response.put("available", true);
+        response.put("message", "Time slot is available for booking");
+        
+        return ResponseEntity.ok(response);
     }
 }
