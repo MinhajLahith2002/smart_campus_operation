@@ -85,4 +85,9 @@ public class BookingController {
         BookingQuery query = new BookingQuery(requesterId, "USER", "APPROVED");
         return bookingService.getBookings(query);
     }
+        @GetMapping("/user/{requesterId}")
+    public List<BookingResponse> getBookingsByUser(@PathVariable String requesterId) {
+        BookingQuery query = new BookingQuery(requesterId, "USER", null);
+        return bookingService.getBookings(query);
+    }
 }
