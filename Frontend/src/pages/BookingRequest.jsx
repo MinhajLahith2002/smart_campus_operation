@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// Booking Request Form - Member 2 (Aran)
+// Feature: Real-time availability check before submission
+// Handles: resource selection, date/time picker, conflict feedbackimport React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Input, Badge } from '../components/ui/Primitives';
 import { Calendar, Clock, Users, Info, ArrowLeft, CheckCircle2, MapPin, ShieldCheck, ClipboardList, ArrowRight } from 'lucide-react';
