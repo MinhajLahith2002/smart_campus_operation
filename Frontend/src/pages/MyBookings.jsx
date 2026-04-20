@@ -16,6 +16,7 @@ const statusConfig = {
   CANCELLED: { badge: 'neutral', label: 'Cancelled' },
 };
 
+
 const statusTabs = ['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
 const activeStatuses = ['PENDING', 'APPROVED'];
 
