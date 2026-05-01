@@ -9,12 +9,14 @@ import {
   revokeTechnicianInvite,
   updateAdminUserStatus,
 } from '../lib/authApi';
+import { useAuth } from '../context/AuthContext';
 
 const ROLE_OPTIONS = ['', 'STUDENT', 'ADMIN', 'TECHNICIAN'];
 const STATUS_OPTIONS = ['', 'ACTIVE', 'PENDING_VERIFICATION', 'DISABLED', 'INVITED'];
 const PROVIDER_OPTIONS = ['', 'LOCAL', 'GOOGLE', 'BOTH'];
 
 export const AdminUsersPage = () => {
+  const { user, isLoading: isAuthLoading, refreshSession } = useAuth();
   const [filters, setFilters] = useState({ query: '', role: '', status: '', provider: '' });
   const [users, setUsers] = useState([]);
   const [invites, setInvites] = useState([]);
@@ -42,8 +44,35 @@ export const AdminUsersPage = () => {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    let ignore = false;
+
+    const initialize = async () => {
+      if (isAuthLoading) {
+        return;
+      }
+
+      const activeUser = user ?? await refreshSession().catch(() => null);
+      if (ignore) {
+        return;
+      }
+
+      if (!activeUser || activeUser.role !== 'ADMIN') {
+        setUsers([]);
+        setInvites([]);
+        setLoading(false);
+        setError('Unauthorized');
+        return;
+      }
+
+      await loadData();
+    };
+
+    initialize();
+
+    return () => {
+      ignore = true;
+    };
+  }, [isAuthLoading, refreshSession, user]);
 
   const handleFilterSubmit = async (event) => {
     event.preventDefault();
@@ -150,7 +179,7 @@ export const AdminUsersPage = () => {
           <Card className="p-8 text-sm text-muted-foreground">Loading users...</Card>
         ) : (
           <div className="space-y-3">
-            {users.map((user) => (
+            {users.length ? users.map((user) => (
               <Card key={user.id} className="bg-white/70 p-6 dark:bg-white/5">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                   <div>
@@ -175,7 +204,9 @@ export const AdminUsersPage = () => {
                   </div>
                 </div>
               </Card>
-            ))}
+            )) : (
+              <Card className="p-8 text-sm text-muted-foreground">No accounts matched the current filters.</Card>
+            )}
           </div>
         )}
       </section>
@@ -187,7 +218,7 @@ export const AdminUsersPage = () => {
         </div>
 
         <div className="space-y-3">
-          {invites.map((invite) => (
+          {invites.length ? invites.map((invite) => (
             <Card key={invite.id} className="bg-white/70 p-6 dark:bg-white/5">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div>
@@ -205,7 +236,9 @@ export const AdminUsersPage = () => {
                 </div>
               </div>
             </Card>
-          ))}
+          )) : (
+            <Card className="p-8 text-sm text-muted-foreground">No technician invites yet.</Card>
+          )}
         </div>
       </section>
     </div>

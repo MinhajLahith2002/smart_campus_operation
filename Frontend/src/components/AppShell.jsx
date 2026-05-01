@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  RefreshCw,
   Search,
   Settings,
   ShieldCheck,
@@ -70,6 +71,7 @@ export const AppShell = ({ children }) => {
   const location = useLocation();
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
   const [latestTechnicianAlert, setLatestTechnicianAlert] = React.useState(null);
   const seenNotificationIdsRef = React.useRef(new Set());
   const technicianAlertBootstrappedRef = React.useRef(false);
@@ -178,6 +180,16 @@ export const AppShell = ({ children }) => {
   const allItems = [...primaryItems, ...supportItems, settingsItem];
   const primaryHeading = user?.role === 'ADMIN' ? 'Operations Desk' : 'Mission Control';
   const supportHeading = 'Signals';
+
+  const requestViewRefresh = () => {
+    if (typeof window !== 'undefined') {
+      // Let individual pages listen if they need targeted refetch behavior.
+      window.dispatchEvent(new Event('tickets:refresh'));
+      window.dispatchEvent(new Event('module:refresh'));
+    }
+    // Remount current module page view without full browser reload.
+    setRefreshNonce((value) => value + 1);
+  };
 
   return (
     <div className="min-h-screen md:flex">
@@ -327,6 +339,10 @@ export const AppShell = ({ children }) => {
             </div>
 
             <div className="flex items-center gap-3">
+              <Button variant="outline" className="gap-2" onClick={requestViewRefresh}>
+                <RefreshCw size={16} />
+                Refresh
+              </Button>
               <div className="hidden rounded-2xl border border-border bg-white/45 px-4 py-2 text-right backdrop-blur-sm md:block dark:bg-white/5">
                 <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-success">
                   <span className="h-2 w-2 rounded-full bg-success" />
@@ -349,7 +365,7 @@ export const AppShell = ({ children }) => {
 
         <main className="px-4 py-5 md:px-8 md:py-8">
           <motion.div
-            key={location.pathname}
+            key={`${location.pathname}:${refreshNonce}`}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.28 }}

@@ -57,6 +57,10 @@ export const AuthProvider = ({ children }) => {
       setUser(mapped);
       return mapped;
     } catch (error) {
+      if (error.status === 0) {
+        setUser(null);
+        return null;
+      }
       if (error.status !== 401) {
         console.error(error);
         throw error;

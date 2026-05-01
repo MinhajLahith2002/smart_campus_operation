@@ -12,7 +12,7 @@ const statusOptions = ['REJECTED'];
 
 export const AdminTicketsPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshSession } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +27,7 @@ export const AdminTicketsPage = () => {
   const [deletingTicketId, setDeletingTicketId] = useState(null);
   const [filters, setFilters] = useState({ status: 'ALL', priority: 'ALL', category: 'ALL' });
   const [archiveFilter, setArchiveFilter] = useState('ALL');
+  const [isRefreshingMeta, setIsRefreshingMeta] = useState(false);
 
   const technicianDirectory = useMemo(
     () => technicians.reduce((lookup, technician) => ({ ...lookup, [technician.id]: technician }), {}),
@@ -36,31 +37,50 @@ export const AdminTicketsPage = () => {
   const loadDesk = async () => {
     try {
       setLoading(true);
+      setIsRefreshingMeta(true);
       setError('');
-      const [ticketData, summaryData, technicianUsers] = await Promise.all([
-        getTickets({ role: user?.role, userId: user?.id }),
+      const ticketData = await getTickets({ role: user?.role, userId: user?.id });
+      setTickets(ticketData);
+      setLoading(false);
+
+      const [summaryResult, techniciansResult] = await Promise.allSettled([
         getTicketSummary(),
         getAdminUsers({ role: 'TECHNICIAN', status: 'ACTIVE' }),
       ]);
-      setTickets(ticketData);
-      setSummary(summaryData);
-      setTechnicians((technicianUsers || []).map((account) => ({
-        id: account.id,
-        name: account.fullName,
-        fullName: account.fullName,
-        email: account.email,
-        status: account.status,
-        available: account.status === 'ACTIVE',
-      })));
+
+      if (summaryResult.status === 'fulfilled') {
+        setSummary(summaryResult.value);
+      }
+
+      if (techniciansResult.status === 'fulfilled') {
+        setTechnicians(normalizeAdminUsersResponse(techniciansResult.value).map((account) => ({
+          id: account.id,
+          name: account.fullName || account.name || account.email || account.id,
+          fullName: account.fullName || account.name || '',
+          email: account.email,
+          status: account.status,
+          available: account.status === 'ACTIVE',
+        })));
+      }
     } catch (err) {
       setError(err.message || 'Unable to load the incident desk.');
-    } finally {
       setLoading(false);
+    } finally {
+      setIsRefreshingMeta(false);
     }
   };
 
   useEffect(() => {
     if (user) loadDesk();
+  }, [user]);
+
+  useEffect(() => {
+    const onRefreshTickets = () => {
+      if (user) loadDesk();
+    };
+
+    window.addEventListener('tickets:refresh', onRefreshTickets);
+    return () => window.removeEventListener('tickets:refresh', onRefreshTickets);
   }, [user]);
 
   const activeTickets = useMemo(() => tickets.filter((ticket) => !['RESOLVED', 'CLOSED', 'REJECTED'].includes(ticket.status)), [tickets]);
@@ -151,15 +171,19 @@ export const AdminTicketsPage = () => {
     }
 
     try {
+      const latestUser = await refreshSession();
+      if (!latestUser || latestUser.role !== 'ADMIN') {
+        throw new Error('Only admins can assign technicians from the incident desk. Please sign in with an admin account.');
+      }
       setSaving(true);
       setActionError('');
       const selectedTechnician = technicians.find((item) => item.id === assignForm.technicianId);
       await assignTechnician(assigningTicket.id, {
         technicianId: assignForm.technicianId,
         technicianName: selectedTechnician?.fullName || '',
-        actorId: user.id,
-        actorName: user.name,
-        actorRole: toBackendRole(user.role),
+        actorId: latestUser.id,
+        actorName: latestUser.name,
+        actorRole: toBackendRole(latestUser.role),
       });
       await loadDesk();
       closePanels();
@@ -174,14 +198,18 @@ export const AdminTicketsPage = () => {
     if (!statusTicket) return;
 
     try {
+      const latestUser = await refreshSession();
+      if (!latestUser || latestUser.role !== 'ADMIN') {
+        throw new Error('Only admins can reject tickets from the incident desk. Please sign in with an admin account.');
+      }
       setSaving(true);
       setActionError('');
       await updateTicketStatus(statusTicket.id, {
         status: statusForm.status,
         resolutionNotes: statusForm.resolutionNotes,
-        actorId: user.id,
-        actorName: user.name,
-        actorRole: toBackendRole(user.role),
+        actorId: latestUser.id,
+        actorName: latestUser.name,
+        actorRole: toBackendRole(latestUser.role),
         detail: statusForm.detail,
       });
       await loadDesk();
@@ -416,7 +444,10 @@ export const AdminTicketsPage = () => {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Active incident queue</h2>
-          <Badge variant="danger">Live admin triage</Badge>
+          <div className="flex items-center gap-2">
+            {isRefreshingMeta && <Badge variant="outline">Refreshing desk details</Badge>}
+            <Badge variant="danger">Live admin triage</Badge>
+          </div>
         </div>
 
         {loading ? (
@@ -584,11 +615,16 @@ const TicketDeskCard = ({ ticket, assignmentState, onOpen, onReject, onAssign, o
         {!archived && ticket.status !== 'REJECTED' && ticket.status !== 'CLOSED' && ticket.status !== 'RESOLVED' && (
           <Button className="gap-2" onClick={onReject}><Wrench size={16} /> Reject ticket</Button>
         )}
-        {!archived && ticket.status !== 'REJECTED' && ticket.status !== 'CLOSED' && ticket.status !== 'RESOLVED' && ticket.status !== 'IN_PROGRESS' && assignmentState.canAssign && (
-          <Button variant="outline" className="gap-2" onClick={onAssign}><ShieldAlert size={16} /> Assign technician</Button>
-        )}
-        {!archived && ticket.status !== 'REJECTED' && ticket.status !== 'CLOSED' && ticket.status !== 'RESOLVED' && ticket.status !== 'IN_PROGRESS' && assignmentState.canReassign && (
-          <Button variant="outline" className="gap-2" onClick={onAssign}><ShieldAlert size={16} /> Reassign technician</Button>
+        {!archived && ticket.status !== 'REJECTED' && ticket.status !== 'CLOSED' && ticket.status !== 'RESOLVED' && ticket.status !== 'IN_PROGRESS' && (
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={onAssign}
+            title={!assignmentState.canAssign && !assignmentState.canReassign ? 'Open the assignment panel to refresh technician availability.' : undefined}
+          >
+            <ShieldAlert size={16} />
+            {ticket.assignedTechnicianId ? 'Reassign technician' : 'Assign technician'}
+          </Button>
         )}
         {archived && (ticket.status === 'CLOSED' || ticket.status === 'REJECTED') && (
           <Button variant="outline" className="gap-2" onClick={onDelete} isLoading={deleting}>
@@ -679,3 +715,8 @@ const isLikelySameIncident = (first, second) => {
   return sameIncidentLocation || hasSharedKeyword;
 };
 
+const normalizeAdminUsersResponse = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.value)) return payload.value;
+  return [];
+};

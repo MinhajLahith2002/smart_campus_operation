@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.smartcampus.modulec.ModuleCBackendApplication;
 import com.smartcampus.operationshub.config.AuthBootstrapConfig;
 import com.smartcampus.operationshub.config.AuthProperties;
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
@@ -19,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-@SpringBootTest
+@SpringBootTest(classes = ModuleCBackendApplication.class)
 class AuthBootstrapConfigTest {
 
     @Autowired

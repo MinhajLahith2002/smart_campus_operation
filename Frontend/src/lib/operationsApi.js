@@ -1,6 +1,6 @@
 import { toBackendRole } from './moduleCApi';
 
-const BACKEND_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8081';
+const BACKEND_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8082';
 const API_BASE = import.meta.env.VITE_OPERATIONS_API_URL || `${BACKEND_BASE}/api`;
 
 const ensureOk = async (response) => {

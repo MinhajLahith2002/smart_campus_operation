@@ -22,14 +22,37 @@ const withJson = async (response) => {
   throw error;
 };
 
-const request = async (path, options = {}) => withJson(await fetch(`${AUTH_BASE}${path}`, {
-  credentials: 'include',
-  headers: {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  },
-  ...options,
-}));
+const request = async (path, options = {}) => {
+  try {
+    const response = await fetch(`${AUTH_BASE}${path}`, {
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+    return await withJson(response);
+  } catch (error) {
+    if (typeof error?.status === 'number') {
+      throw error;
+    }
+    const networkError = new Error('Cannot reach the backend server. Make sure the backend is running and the API URL is correct.');
+    networkError.status = 0;
+    networkError.cause = error;
+    throw networkError;
+  }
+};
+
+const unwrapList = (payload) => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  if (Array.isArray(payload?.value)) {
+    return payload.value;
+  }
+  return [];
+};
 
 export const getAuthConfig = async () => request('/config');
 export const getCurrentUser = async () => request('/me');
@@ -51,7 +74,7 @@ export const getAdminUsers = async ({ query = '', role = '', status = '', provid
   if (status) search.set('status', status);
   if (provider) search.set('provider', provider);
   const suffix = search.toString() ? `?${search.toString()}` : '';
-  return request(`/admin/users${suffix}`);
+  return unwrapList(await request(`/admin/users${suffix}`));
 };
 
 export const updateAdminUserStatus = async (userId, status) => request(`/admin/users/${userId}/status`, {
@@ -59,7 +82,7 @@ export const updateAdminUserStatus = async (userId, status) => request(`/admin/u
   body: JSON.stringify({ status }),
 });
 
-export const getTechnicianInvites = async () => request('/admin/invites');
+export const getTechnicianInvites = async () => unwrapList(await request('/admin/invites'));
 export const createTechnicianInvite = async (payload) => request('/admin/invites', { method: 'POST', body: JSON.stringify(payload) });
 export const resendTechnicianInvite = async (inviteId) => request(`/admin/invites/${inviteId}/resend`, { method: 'POST' });
 export const revokeTechnicianInvite = async (inviteId) => request(`/admin/invites/${inviteId}/revoke`, { method: 'POST' });

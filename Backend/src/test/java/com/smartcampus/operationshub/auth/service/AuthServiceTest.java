@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.smartcampus.modulec.ModuleCBackendApplication;
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
@@ -28,7 +29,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-@SpringBootTest(properties = {
+@SpringBootTest(classes = ModuleCBackendApplication.class, properties = {
         "app.auth.bootstrap-admin.email=seed-admin@campus.edu",
         "app.auth.bootstrap-admin.password=Admin@123!"
 })

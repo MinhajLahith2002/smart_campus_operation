@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 export const MyTickets = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [adminRedirecting, setAdminRedirecting] = useState(false);
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [archiveFilter, setArchiveFilter] = useState('ALL');
   const [tickets, setTickets] = useState([]);
@@ -33,9 +34,41 @@ export const MyTickets = () => {
   };
 
   useEffect(() => {
+    if (user?.role === 'ADMIN') {
+      setAdminRedirecting(true);
+      const timeoutId = window.setTimeout(() => {
+        navigate('/admin/tickets', { replace: true });
+      }, 1200);
+      return () => window.clearTimeout(timeoutId);
+    }
     let ignore = false;
     if (user) loadTickets();
     return () => { ignore = true; };
+  }, [user, navigate]);
+
+  if (adminRedirecting) {
+    return (
+      <Card className="p-6 text-sm">
+        <p className="font-semibold text-foreground">Opening admin incident desk...</p>
+        <p className="mt-2 text-muted-foreground">
+          Admin assignment and rejection controls are available in the dedicated admin ticket workspace.
+        </p>
+        <div className="mt-4">
+          <Button className="gap-2" onClick={() => navigate('/admin/tickets', { replace: true })}>
+            <Wrench size={16} /> Open Admin Incident Desk
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  useEffect(() => {
+    const onRefreshTickets = () => {
+      if (user) loadTickets();
+    };
+
+    window.addEventListener('tickets:refresh', onRefreshTickets);
+    return () => window.removeEventListener('tickets:refresh', onRefreshTickets);
   }, [user]);
 
   const handleDeleteTicket = async (ticket) => {
@@ -233,7 +266,6 @@ const InfoTile = ({ title, icon, copy }) => (
 );
 
 const TicketListCard = ({ ticket, onOpen, onDelete, deleting = false, archived = false }) => {
-  const latestActivity = ticket.activities?.[ticket.activities.length - 1];
   const canDelete = archived && ['CLOSED', 'REJECTED'].includes(ticket.status);
 
   return (
@@ -287,7 +319,7 @@ const TicketListCard = ({ ticket, onOpen, onDelete, deleting = false, archived =
           </div>
 
           <div className="grid gap-4 md:grid-cols-4">
-            <InfoTile title="Latest activity" icon={<MessageSquareMore size={16} className="text-primary" />} copy={latestActivity ? latestActivity.detail : 'No follow-up activity yet.'} />
+            <InfoTile title="Latest activity" icon={<MessageSquareMore size={16} className="text-primary" />} copy={getLatestTicketActivityCopy(ticket)} />
             <InfoTile title="Admin handling" icon={<AlertCircle size={16} className="text-primary" />} copy={ticket.rejectedAt ? `${ticket.rejectedByName || 'Operations Admin'} rejected this ticket.` : ticket.assignedAt ? `${ticket.assignedByName || 'Operations Admin'} assigned it on ${format(new Date(ticket.assignedAt), 'MMM d, yyyy')}.` : 'Awaiting a recorded admin decision.'} />
             <InfoTile title="Technician progress" icon={<Wrench size={16} className="text-primary" />} copy={ticket.resolvedAt ? `${ticket.resolvedByName || ticket.assignedTechnicianName || 'Technician'} resolved it.` : ticket.technicianStartedAt ? `${ticket.technicianStartedByName || ticket.assignedTechnicianName || 'Technician'} started work.` : ticket.assignedTechnicianName || ticket.assignedTechnicianId || (ticket.status === 'ASSIGNED' ? 'Technician assigned' : 'Pending assignment')} />
             <InfoTile title={archived ? 'Final outcome' : 'Resolution note'} icon={<AlertCircle size={16} className="text-primary" />} copy={ticket.rejectionReason || ticket.resolutionNotes || 'No final outcome note yet.'} />
@@ -296,6 +328,15 @@ const TicketListCard = ({ ticket, onOpen, onDelete, deleting = false, archived =
       </div>
     </Card>
   );
+};
+
+const getLatestTicketActivityCopy = (ticket) => {
+  if (ticket.rejectedAt) return `${ticket.rejectedByName || 'Operations Admin'} rejected this ticket.`;
+  if (ticket.closedAt) return `${ticket.closedByName || 'Reporter'} closed this ticket.`;
+  if (ticket.resolvedAt) return `${ticket.resolvedByName || ticket.assignedTechnicianName || 'Technician'} resolved this ticket.`;
+  if (ticket.technicianStartedAt) return `${ticket.technicianStartedByName || ticket.assignedTechnicianName || 'Technician'} started work on this ticket.`;
+  if (ticket.assignedAt) return `${ticket.assignedByName || 'Operations Admin'} assigned this ticket for repair.`;
+  return 'Ticket created and waiting for the next update.';
 };
 
 const EmptyState = ({ title, copy }) => (

@@ -31,9 +31,11 @@ import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -118,26 +120,31 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<TicketResponse> getTickets(TicketQuery query, AuthUserPrincipal principal) {
-        return ticketRepository.findAll().stream()
-                .filter(ticket -> matchesRoleScope(ticket, principal, query))
+        UserRole actorRole = resolveCurrentRole(principal);
+        List<Ticket> allTickets = ticketRepository.findAllByOrderByUpdatedAtDesc();
+        Map<Long, Long> similarOpenIncidentCounts = buildSimilarOpenIncidentCounts(allTickets);
+
+        return allTickets.stream()
+                .filter(ticket -> matchesRoleScope(ticket, principal.getPublicId(), actorRole, query))
                 .filter(ticket -> query.status() == null || ticket.getStatus().name().equalsIgnoreCase(query.status()))
                 .filter(ticket -> query.priority() == null || ticket.getPriority().name().equalsIgnoreCase(query.priority()))
                 .filter(ticket -> query.category() == null || ticket.getCategory().name().equalsIgnoreCase(query.category()))
-                .sorted(Comparator.comparing(Ticket::getUpdatedAt).reversed())
-                .map(this::map)
+                .map(ticket -> map(ticket, similarOpenIncidentCounts.getOrDefault(ticket.getId(), 0L), false))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public TicketResponse getTicket(Long ticketId, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         Ticket ticket = findTicket(ticketId);
-        ensureCanView(ticket, principal.getPublicId(), principal.getRole(), "You cannot access this ticket.");
+        ensureCanView(ticket, principal.getPublicId(), actorRole, "You cannot access this ticket.");
         return map(ticket);
     }
 
     public TicketResponse updateTicket(@NonNull Long ticketId, CreateTicketRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         Ticket ticket = findTicket(ticketId);
-        ensureEditableByReporter(ticket, principal.getPublicId(), principal.getRole(), "Only the original reporter can edit an open ticket.");
+        ensureEditableByReporter(ticket, principal.getPublicId(), actorRole, "Only the original reporter can edit an open ticket.");
         validateCreateRequest(request);
 
         ticket.setTitle(buildTicketTitle(request));
@@ -176,14 +183,16 @@ public class TicketService {
     }
 
     public void deleteTicket(@NonNull Long ticketId, TicketDecisionRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         Ticket ticket = findTicket(ticketId);
-        ensureCanDeleteTicket(ticket, principal.getPublicId(), principal.getRole(), "Only the original reporter or an admin can delete this ticket.");
+        ensureCanDeleteTicket(ticket, principal.getPublicId(), actorRole, "Only the original reporter or an admin can delete this ticket.");
         ticketRepository.delete(ticket);
     }
 
     public TicketResponse assignTechnician(Long ticketId, AssignTechnicianRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         Ticket ticket = findTicket(ticketId);
-        ensureAdmin(principal.getRole(), "Only admins can assign technicians.");
+        ensureAdmin(actorRole, "Only admins can assign technicians.");
         validateAssignment(request);
         ensureAssignable(ticket);
         ensureNoDuplicateDispatchConflict(ticket);
@@ -201,18 +210,19 @@ public class TicketService {
         ticket.setAssignedAt(now);
         ticket.setStatus(TicketStatus.ASSIGNED);
         ticket.setUpdatedAt(now);
-        addActivity(ticket, principal.getFullName(), principal.getRole(), "TECHNICIAN_ASSIGNED",
+        addActivity(ticket, principal.getFullName(), actorRole, "TECHNICIAN_ASSIGNED",
                 "Assigned to " + technician.getFullName() + " (" + technician.getPublicId() + ").");
 
         return map(ticketRepository.save(ticket));
     }
 
     public TicketResponse updateStatus(Long ticketId, UpdateTicketStatusRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         Ticket ticket = findTicket(ticketId);
         TicketStatus currentStatus = ticket.getStatus();
         TicketStatus nextStatus = request.status();
 
-        ensureStatusPermission(ticket, principal.getPublicId(), principal.getRole(), nextStatus);
+        ensureStatusPermission(ticket, principal.getPublicId(), actorRole, nextStatus);
 
         if (nextStatus == TicketStatus.CLOSED || nextStatus == TicketStatus.OPEN) {
             throw new IllegalArgumentException("Use the close or reopen workflow for that transition.");
@@ -250,7 +260,7 @@ public class TicketService {
 
         addActivity(ticket,
                 principal.getFullName(),
-                principal.getRole(),
+                actorRole,
                 "STATUS_UPDATED",
                 isBlank(request.detail())
                         ? "Ticket moved to " + nextStatus.name() + "."
@@ -260,8 +270,13 @@ public class TicketService {
     }
 
     public TicketResponse closeTicket(Long ticketId, TicketDecisionRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         Ticket ticket = findTicket(ticketId);
-        ensureReporterOrAdmin(ticket, principal.getPublicId(), principal.getRole(), "Only the reporter or an admin can close this ticket.");
+        ensureReporterOrAdmin(ticket,
+                principal.getPublicId(),
+                principal.getEmail(),
+                actorRole,
+                "Only the reporter or an admin can close this ticket.");
         if (ticket.getStatus() != TicketStatus.RESOLVED) {
             throw new IllegalArgumentException("Only resolved tickets can be closed.");
         }
@@ -273,7 +288,7 @@ public class TicketService {
         ticket.setUpdatedAt(now);
         addActivity(ticket,
                 principal.getFullName(),
-                principal.getRole(),
+                actorRole,
                 "TICKET_CLOSED",
                 isBlank(request.note()) ? "Resolution confirmed and ticket closed." : request.note().trim());
 
@@ -281,8 +296,13 @@ public class TicketService {
     }
 
     public TicketResponse reopenTicket(Long ticketId, TicketDecisionRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         Ticket ticket = findTicket(ticketId);
-        ensureReporterOrAdmin(ticket, principal.getPublicId(), principal.getRole(), "Only the reporter or an admin can reopen this ticket.");
+        ensureReporterOrAdmin(ticket,
+                principal.getPublicId(),
+                principal.getEmail(),
+                actorRole,
+                "Only the reporter or an admin can reopen this ticket.");
         if (ticket.getStatus() != TicketStatus.RESOLVED) {
             throw new IllegalArgumentException("Only resolved tickets can be reopened.");
         }
@@ -307,7 +327,7 @@ public class TicketService {
         appendReopenEvidence(ticket, request.evidenceLabel(), request.evidenceDataUrl());
         addActivity(ticket,
                 principal.getFullName(),
-                principal.getRole(),
+                actorRole,
                 "TICKET_REOPENED",
                 buildReopenDetail(request.note(), request.evidenceLabel()));
 
@@ -315,8 +335,9 @@ public class TicketService {
     }
 
     public TicketCommentResponse addComment(Long ticketId, TicketCommentRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         Ticket ticket = findTicket(ticketId);
-        ensureCanView(ticket, principal.getPublicId(), principal.getRole(), "You cannot comment on this ticket.");
+        ensureCanView(ticket, principal.getPublicId(), actorRole, "You cannot comment on this ticket.");
         ensureCommentable(ticket);
         validateCommentBody(request.body());
 
@@ -332,17 +353,18 @@ public class TicketService {
         comment.setDeleted(false);
         ticket.setUpdatedAt(OffsetDateTime.now());
 
-        addActivity(ticket, principal.getFullName(), principal.getRole(), "COMMENT_ADDED", "New comment added to the ticket discussion.");
+        addActivity(ticket, principal.getFullName(), actorRole, "COMMENT_ADDED", "New comment added to the ticket discussion.");
         ticketRepository.save(ticket);
         TicketComment savedComment = ticketCommentRepository.save(comment);
         return mapComment(savedComment);
     }
 
     public TicketCommentResponse updateComment(Long commentId, TicketCommentRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         TicketComment comment = findComment(commentId);
         Ticket ticket = comment.getTicket();
         ensureCommentable(ticket);
-        ensureCanView(ticket, principal.getPublicId(), principal.getRole(), "You cannot edit comments on this ticket.");
+        ensureCanView(ticket, principal.getPublicId(), actorRole, "You cannot edit comments on this ticket.");
         if (!principal.getPublicId().equals(comment.getAuthorId())) {
             throw new SecurityException("Only the comment owner can edit this comment.");
         }
@@ -353,16 +375,17 @@ public class TicketService {
         comment.setEdited(true);
         ticket.setUpdatedAt(OffsetDateTime.now());
 
-        addActivity(ticket, principal.getFullName(), principal.getRole(), "COMMENT_EDITED", "A comment was edited by its owner.");
+        addActivity(ticket, principal.getFullName(), actorRole, "COMMENT_EDITED", "A comment was edited by its owner.");
         ticketRepository.save(ticket);
         return mapComment(comment);
     }
 
     public void deleteComment(Long commentId, TicketDecisionRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         TicketComment comment = findComment(commentId);
         Ticket ticket = comment.getTicket();
-        ensureCanView(ticket, principal.getPublicId(), principal.getRole(), "You cannot moderate this ticket discussion.");
-        if (principal.getRole() != UserRole.ADMIN && !principal.getPublicId().equals(comment.getAuthorId())) {
+        ensureCanView(ticket, principal.getPublicId(), actorRole, "You cannot moderate this ticket discussion.");
+        if (actorRole != UserRole.ADMIN && !principal.getPublicId().equals(comment.getAuthorId())) {
             throw new SecurityException("Only the comment owner or an admin can delete this comment.");
         }
 
@@ -372,22 +395,49 @@ public class TicketService {
         comment.setEdited(true);
         ticket.setUpdatedAt(OffsetDateTime.now());
 
-        addActivity(ticket, principal.getFullName(), principal.getRole(), "COMMENT_DELETED", "A comment was removed from the ticket discussion.");
+        addActivity(ticket, principal.getFullName(), actorRole, "COMMENT_DELETED", "A comment was removed from the ticket discussion.");
         ticketRepository.save(ticket);
     }
 
     @Transactional(readOnly = true)
     public TicketSummaryResponse getSummary() {
         List<Ticket> tickets = ticketRepository.findAll();
+        long open = 0;
+        long triaged = 0;
+        long assigned = 0;
+        long inProgress = 0;
+        long resolved = 0;
+        long unassigned = 0;
+        long highOrCritical = 0;
+
+        for (Ticket ticket : tickets) {
+            if (ticket.getAssignedTechnicianId() == null || ticket.getAssignedTechnicianId().isBlank()) {
+                unassigned++;
+            }
+            if (ticket.getPriority() == TicketPriority.HIGH || ticket.getPriority() == TicketPriority.CRITICAL) {
+                highOrCritical++;
+            }
+
+            switch (ticket.getStatus()) {
+                case OPEN -> open++;
+                case TRIAGED -> triaged++;
+                case ASSIGNED -> assigned++;
+                case IN_PROGRESS -> inProgress++;
+                case RESOLVED, CLOSED -> resolved++;
+                default -> {
+                }
+            }
+        }
+
         return new TicketSummaryResponse(
                 tickets.size(),
-                tickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.OPEN).count(),
-                tickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.TRIAGED).count(),
-                tickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.ASSIGNED).count(),
-                tickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.IN_PROGRESS).count(),
-                tickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.RESOLVED || ticket.getStatus() == TicketStatus.CLOSED).count(),
-                tickets.stream().filter(ticket -> ticket.getAssignedTechnicianId() == null || ticket.getAssignedTechnicianId().isBlank()).count(),
-                tickets.stream().filter(ticket -> ticket.getPriority() == TicketPriority.HIGH || ticket.getPriority() == TicketPriority.CRITICAL).count()
+                open,
+                triaged,
+                assigned,
+                inProgress,
+                resolved,
+                unassigned,
+                highOrCritical
         );
     }
 
@@ -401,17 +451,17 @@ public class TicketService {
                 .orElseThrow(() -> new EntityNotFoundException("Comment " + commentId + " was not found."));
     }
 
-    private boolean matchesRoleScope(Ticket ticket, AuthUserPrincipal principal, TicketQuery query) {
-        if (principal.getRole() == UserRole.ADMIN) {
+    private boolean matchesRoleScope(Ticket ticket, String actorId, UserRole actorRole, TicketQuery query) {
+        if (actorRole == UserRole.ADMIN) {
             return true;
         }
-        if (principal.getRole() == UserRole.TECHNICIAN) {
+        if (actorRole == UserRole.TECHNICIAN) {
             if (Boolean.parseBoolean(String.valueOf(query.assignedToMe()))) {
-                return principal.getPublicId().equals(ticket.getAssignedTechnicianId());
+                return actorId.equals(ticket.getAssignedTechnicianId());
             }
-            return principal.getPublicId().equals(ticket.getAssignedTechnicianId());
+            return actorId.equals(ticket.getAssignedTechnicianId());
         }
-        return principal.getPublicId().equals(ticket.getReporterId());
+        return actorId.equals(ticket.getReporterId());
     }
 
     private void ensureAdmin(UserRole actorRole, String message) {
@@ -429,10 +479,31 @@ public class TicketService {
         }
     }
 
-    private void ensureReporterOrAdmin(Ticket ticket, String actorId, UserRole actorRole, String message) {
+    private void ensureReporterOrAdmin(Ticket ticket, String actorId, String actorEmail, UserRole actorRole, String message) {
         if (actorRole == UserRole.ADMIN) return;
-        if (actorRole == ticket.getReporterRole() && actorId != null && actorId.equals(ticket.getReporterId())) return;
+        if (matchesReporterIdentity(ticket, actorId, actorEmail, actorRole)) return;
         throw new SecurityException(message);
+    }
+
+    private boolean matchesReporterIdentity(Ticket ticket, String actorId, String actorEmail, UserRole actorRole) {
+        if (actorRole != ticket.getReporterRole()) {
+            return false;
+        }
+
+        if (actorId != null && actorId.equals(ticket.getReporterId())) {
+            return true;
+        }
+
+        String normalizedActorEmail = normalizeEmail(actorEmail);
+        String normalizedReporterEmail = normalizeEmail(ticket.getReporterEmail());
+        return normalizedActorEmail != null && normalizedActorEmail.equals(normalizedReporterEmail);
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 
     private void ensureEditableByReporter(Ticket ticket, String actorId, UserRole actorRole, String message) {
@@ -557,21 +628,23 @@ public class TicketService {
     }
 
     private void ensureStatusPermission(Ticket ticket, String actorId, UserRole actorRole, TicketStatus nextStatus) {
+        if (nextStatus == TicketStatus.IN_PROGRESS || nextStatus == TicketStatus.RESOLVED) {
+            if (actorId == null || !actorId.equals(ticket.getAssignedTechnicianId())) {
+                throw new SecurityException("Only the assigned technician can move active ticket work forward.");
+            }
+            return;
+        }
+
         if (actorRole == UserRole.ADMIN) {
             if (nextStatus != TicketStatus.REJECTED) {
                 throw new SecurityException("Admins can only reject tickets. Assignment is the admin workflow action for active cases.");
             }
             return;
         }
-        if (actorRole != UserRole.TECHNICIAN) {
-            throw new SecurityException("Only the assigned technician can move active ticket work forward.");
+        if (nextStatus == TicketStatus.REJECTED) {
+            throw new SecurityException("Only admins can reject tickets from the incident desk.");
         }
-        if (actorId == null || !actorId.equals(ticket.getAssignedTechnicianId())) {
-            throw new SecurityException("Only the assigned technician can update this ticket.");
-        }
-        if (nextStatus != TicketStatus.IN_PROGRESS && nextStatus != TicketStatus.RESOLVED) {
-            throw new SecurityException("Technicians can only move assigned tickets to In Progress or Resolved.");
-        }
+        throw new SecurityException("Unsupported ticket status action for this role.");
     }
 
     private void ensureTransitionAllowed(TicketStatus currentStatus, TicketStatus nextStatus) {
@@ -588,6 +661,7 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<DuplicateTicketMatchResponse> findPossibleDuplicates(DuplicateTicketCheckRequest request, AuthUserPrincipal principal) {
+        UserRole actorRole = resolveCurrentRole(principal);
         validateDuplicateCheckRequest(request);
 
         OffsetDateTime now = OffsetDateTime.now();
@@ -601,7 +675,7 @@ public class TicketService {
                 .filter(ticket -> request.excludeTicketId() == null || !Objects.equals(ticket.getId(), request.excludeTicketId()))
                 .filter(ticket -> ACTIVE_DUPLICATE_STATUSES.contains(ticket.getStatus()))
                 .filter(ticket -> ticket.getUpdatedAt() != null && !ticket.getUpdatedAt().isBefore(recentThreshold))
-                .map(ticket -> buildDuplicateMatch(ticket, principal, requestResourceName, requestResourceLocation, requestIncidentLocation, request.category(), requestKeywords, now))
+                .map(ticket -> buildDuplicateMatch(ticket, principal.getPublicId(), actorRole, requestResourceName, requestResourceLocation, requestIncidentLocation, request.category(), requestKeywords, now))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(DuplicateTicketMatchResponse::matchScore).reversed()
                         .thenComparing(DuplicateTicketMatchResponse::updatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
@@ -610,7 +684,8 @@ public class TicketService {
     }
 
     private DuplicateTicketMatchResponse buildDuplicateMatch(Ticket ticket,
-                                                             AuthUserPrincipal principal,
+                                                             String actorId,
+                                                             UserRole actorRole,
                                                              String requestResourceName,
                                                              String requestResourceLocation,
                                                              String requestIncidentLocation,
@@ -681,7 +756,7 @@ public class TicketService {
             return null;
         }
 
-        boolean viewable = canViewDuplicate(principal, ticket);
+        boolean viewable = canViewDuplicate(actorId, actorRole, ticket);
         return new DuplicateTicketMatchResponse(
                 ticket.getId(),
                 ticket.getTitle(),
@@ -695,15 +770,21 @@ public class TicketService {
         );
     }
 
-    private boolean canViewDuplicate(AuthUserPrincipal principal, Ticket ticket) {
-        if (principal.getRole() == UserRole.ADMIN) {
+    private boolean canViewDuplicate(String actorId, UserRole actorRole, Ticket ticket) {
+        if (actorRole == UserRole.ADMIN) {
             return true;
         }
-        if (Objects.equals(principal.getPublicId(), ticket.getReporterId())) {
+        if (Objects.equals(actorId, ticket.getReporterId())) {
             return true;
         }
-        return principal.getRole() == UserRole.TECHNICIAN
-                && Objects.equals(principal.getPublicId(), ticket.getAssignedTechnicianId());
+        return actorRole == UserRole.TECHNICIAN
+                && Objects.equals(actorId, ticket.getAssignedTechnicianId());
+    }
+
+    private UserRole resolveCurrentRole(AuthUserPrincipal principal) {
+        return authUserRepository.findByPublicId(principal.getPublicId())
+                .map(AuthUser::getRole)
+                .orElse(principal.getRole());
     }
 
     private void validateDuplicateCheckRequest(DuplicateTicketCheckRequest request) {
@@ -912,7 +993,10 @@ public class TicketService {
     }
 
     private TicketResponse map(Ticket ticket) {
-        long similarOpenIncidents = countSimilarOpenIncidents(ticket);
+        return map(ticket, countSimilarOpenIncidents(ticket), true);
+    }
+
+    private TicketResponse map(Ticket ticket, long similarOpenIncidents, boolean includeDiscussion) {
         int completenessScore = calculateCompleteness(ticket);
         int smartPriorityScore = calculateIncidentScore(ticket);
         String smartPriorityLabel = deriveSuggestedPriority(ticket.getTitle(), ticket.getDescription(), ticket.getOperationalImpact(), ticket.getCategory().name(), ticket.getEvidenceItems().size()).name();
@@ -955,7 +1039,8 @@ public class TicketService {
                 ticket.getCreatedAt(),
                 ticket.getUpdatedAt(),
                 ticket.getEvidenceItems().stream().map(TicketEvidence::getLabel).toList(),
-                ticket.getActivities().stream()
+                includeDiscussion
+                        ? ticket.getActivities().stream()
                         .map(activity -> new TicketActivityResponse(
                                 activity.getId(),
                                 activity.getActorName(),
@@ -963,8 +1048,9 @@ public class TicketService {
                                 activity.getAction(),
                                 activity.getDetail(),
                                 activity.getCreatedAt()))
-                        .toList(),
-                ticket.getComments().stream().map(this::mapComment).toList(),
+                        .toList()
+                        : List.of(),
+                includeDiscussion ? ticket.getComments().stream().map(this::mapComment).toList() : List.of(),
                 similarOpenIncidents,
                 completenessScore,
                 smartPriorityScore,
@@ -973,13 +1059,48 @@ public class TicketService {
         );
     }
 
+    private Map<Long, Long> buildSimilarOpenIncidentCounts(List<Ticket> tickets) {
+        Map<String, Long> activeResourceCounts = new HashMap<>();
+        Map<String, Long> activeCategoryCounts = new HashMap<>();
+        Map<String, Long> activeResourceCategoryCounts = new HashMap<>();
+        Map<Long, Long> counts = new HashMap<>();
+
+        for (Ticket ticket : tickets) {
+            if (ticket.getStatus() == TicketStatus.CLOSED || ticket.getStatus() == TicketStatus.REJECTED) {
+                continue;
+            }
+
+            String resourceKey = normalise(ticket.getResourceName());
+            String categoryKey = ticket.getCategory().name();
+            String resourceCategoryKey = resourceCategoryKey(resourceKey, categoryKey);
+
+            activeResourceCounts.merge(resourceKey, 1L, Long::sum);
+            activeCategoryCounts.merge(categoryKey, 1L, Long::sum);
+            activeResourceCategoryCounts.merge(resourceCategoryKey, 1L, Long::sum);
+        }
+
+        for (Ticket ticket : tickets) {
+            String resourceKey = normalise(ticket.getResourceName());
+            String categoryKey = ticket.getCategory().name();
+            String resourceCategoryKey = resourceCategoryKey(resourceKey, categoryKey);
+
+            long similarCount = activeResourceCounts.getOrDefault(resourceKey, 0L)
+                    + activeCategoryCounts.getOrDefault(categoryKey, 0L)
+                    - activeResourceCategoryCounts.getOrDefault(resourceCategoryKey, 0L);
+
+            if (ticket.getStatus() != TicketStatus.CLOSED && ticket.getStatus() != TicketStatus.REJECTED) {
+                similarCount--;
+            }
+
+            counts.put(ticket.getId(), Math.max(similarCount, 0L));
+        }
+
+        return counts;
+    }
+
     private long countSimilarOpenIncidents(Ticket ticket) {
-        return ticketRepository.findAll().stream()
-                .filter(other -> !Objects.equals(other.getId(), ticket.getId()))
-                .filter(other -> other.getStatus() != TicketStatus.CLOSED && other.getStatus() != TicketStatus.REJECTED)
-                .filter(other -> Objects.equals(normalise(other.getResourceName()), normalise(ticket.getResourceName()))
-                        || Objects.equals(other.getCategory(), ticket.getCategory()))
-                .count();
+        return buildSimilarOpenIncidentCounts(ticketRepository.findAll())
+                .getOrDefault(ticket.getId(), 0L);
     }
 
     private int calculateCompleteness(Ticket ticket) {
@@ -1010,6 +1131,10 @@ public class TicketService {
         score += keywordHits(text, MEDIUM_KEYWORDS) * 4;
 
         return Math.min(score, 100);
+    }
+
+    private String resourceCategoryKey(String resourceKey, String categoryKey) {
+        return resourceKey + "\u0000" + categoryKey;
     }
 
     private TicketPriority deriveSuggestedPriority(String title, String description, String operationalImpact, String category, int evidenceCount) {
@@ -1058,6 +1183,3 @@ public class TicketService {
         return isBlank(value) ? null : value.trim();
     }
 }
-
-
-

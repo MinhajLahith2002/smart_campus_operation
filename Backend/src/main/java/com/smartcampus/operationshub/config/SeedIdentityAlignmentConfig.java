@@ -17,8 +17,10 @@ import com.smartcampus.operationshub.notifications.domain.NotificationEvent;
 import com.smartcampus.operationshub.notifications.repository.NotificationEventRepository;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -79,7 +81,7 @@ public class SeedIdentityAlignmentConfig {
             bookingRecordRepository.saveAll(bookings);
         }
 
-        List<Ticket> tickets = ticketRepository.findAll();
+        List<Ticket> tickets = distinctTickets(ticketRepository.findAll());
         boolean ticketChanged = false;
         for (Ticket ticket : tickets) {
             String reporterEmail = normalize(ticket.getReporterEmail());
@@ -118,7 +120,7 @@ public class SeedIdentityAlignmentConfig {
             technician = authUserRepository.save(technician);
         }
 
-        List<Ticket> tickets = ticketRepository.findAll();
+        List<Ticket> tickets = distinctTickets(ticketRepository.findAll());
         boolean ticketChanged = false;
         for (Ticket ticket : tickets) {
             if (TECHNICIAN_LEGACY_IDS.contains(normalize(ticket.getAssignedTechnicianId())) && !TECHNICIAN_TARGET_ID.equals(ticket.getAssignedTechnicianId())) {
@@ -158,7 +160,7 @@ public class SeedIdentityAlignmentConfig {
     private void syncTicketIdentityDetails(TicketRepository ticketRepository,
                                            RoleIdentity student,
                                            RoleIdentity technician) {
-        List<Ticket> tickets = ticketRepository.findAll();
+        List<Ticket> tickets = distinctTickets(ticketRepository.findAll());
         boolean changed = false;
         for (Ticket ticket : tickets) {
             if (student.publicId().equals(ticket.getReporterId())) {
@@ -483,6 +485,14 @@ public class SeedIdentityAlignmentConfig {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private List<Ticket> distinctTickets(List<Ticket> tickets) {
+        Map<Long, Ticket> uniqueTickets = new LinkedHashMap<>();
+        for (Ticket ticket : tickets) {
+            uniqueTickets.putIfAbsent(ticket.getId(), ticket);
+        }
+        return List.copyOf(uniqueTickets.values());
     }
 
     private record RoleIdentity(String publicId, String name, String email, UserRole role) {

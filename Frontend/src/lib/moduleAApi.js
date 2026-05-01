@@ -1,6 +1,6 @@
 import { toBackendRole } from './moduleCApi';
 
-const BACKEND_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8081';
+const BACKEND_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8082';
 
 export const MODULE_A_API_BASE = import.meta.env.VITE_MODULE_A_API_URL || `${BACKEND_BASE}/api/module-a/resources`;
 export const RESOURCE_TYPES = ['LAB', 'HALL', 'MEETING_ROOM', 'EQUIPMENT'];

@@ -18,7 +18,7 @@ export const DEMO_ROLE_CREDENTIALS = {
     role: 'ADMIN',
     title: 'Operations Admin',
     id: readDemoEnv('VITE_DEMO_ADMIN_ID', 'admin-1'),
-    name: readDemoEnv('VITE_DEMO_ADMIN_NAME', 'Campus Operations Admin'),
+    name: readDemoEnv('VITE_DEMO_ADMIN_NAME', 'Sample Admin'),
     email: readDemoEnv('VITE_DEMO_ADMIN_EMAIL', 'admin@campus.edu'),
     campusId: readDemoEnv('VITE_DEMO_ADMIN_CAMPUS_ID', 'AD2026001'),
     password: readDemoEnv('VITE_DEMO_ADMIN_PASSWORD', 'Admin@123!'),

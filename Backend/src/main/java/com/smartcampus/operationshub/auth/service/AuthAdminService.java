@@ -51,7 +51,6 @@ public class AuthAdminService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    @Transactional(readOnly = true)
     public List<AuthUserResponse> getUsers(String query,
                                            UserRole role,
                                            AccountStatus status,
