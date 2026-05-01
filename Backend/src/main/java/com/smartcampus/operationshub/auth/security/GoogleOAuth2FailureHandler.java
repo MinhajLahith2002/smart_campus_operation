@@ -1,6 +1,6 @@
 package com.smartcampus.operationshub.auth.security;
 
-import com.smartcampus.operationshub.config.AuthProperties;
+import com.smartcampus.operationshub.auth.config.AuthProperties;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

@@ -1,12 +1,15 @@
-const API_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8082';
-const AUTH_BASE = `${API_BASE}/api/auth`;
+import { BACKEND_BASE_URL } from './backendConfig';
 
-export const GOOGLE_LOGIN_URL = `${API_BASE}/oauth2/authorization/google`;
+const AUTH_BASE = `${BACKEND_BASE_URL}/api/auth`;
+const REQUEST_TIMEOUT_MS = 12000;
+
+export const GOOGLE_LOGIN_URL = `${BACKEND_BASE_URL}/oauth2/authorization/google`;
 
 const withJson = async (response) => {
   let data = null;
   try {
-    data = await response.json();
+    const raw = await response.text();
+    data = raw ? JSON.parse(raw) : null;
   } catch (_) {
     data = null;
   }
@@ -23,6 +26,9 @@ const withJson = async (response) => {
 };
 
 const request = async (path, options = {}) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${AUTH_BASE}${path}`, {
       credentials: 'include',
@@ -31,26 +37,32 @@ const request = async (path, options = {}) => {
         ...(options.headers || {}),
       },
       ...options,
+      signal: options.signal || controller.signal,
     });
+
     return await withJson(response);
   } catch (error) {
-    if (typeof error?.status === 'number') {
-      throw error;
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error('The server took too long to respond. Please try again.');
+      timeoutError.code = 'REQUEST_TIMEOUT';
+      throw timeoutError;
     }
-    const networkError = new Error('Cannot reach the backend server. Make sure the backend is running and the API URL is correct.');
-    networkError.status = 0;
-    networkError.cause = error;
-    throw networkError;
+
+    if (error instanceof TypeError) {
+      const networkError = new Error('Unable to reach the server. Check that the backend is running and try again.');
+      networkError.code = 'NETWORK_ERROR';
+      throw networkError;
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 };
 
 const unwrapList = (payload) => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-  if (Array.isArray(payload?.value)) {
-    return payload.value;
-  }
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.value)) return payload.value;
   return [];
 };
 
@@ -82,10 +94,14 @@ export const updateAdminUserStatus = async (userId, status) => request(`/admin/u
   body: JSON.stringify({ status }),
 });
 
-export const getTechnicianInvites = async () => unwrapList(await request('/admin/invites'));
-export const createTechnicianInvite = async (payload) => request('/admin/invites', { method: 'POST', body: JSON.stringify(payload) });
-export const resendTechnicianInvite = async (inviteId) => request(`/admin/invites/${inviteId}/resend`, { method: 'POST' });
-export const revokeTechnicianInvite = async (inviteId) => request(`/admin/invites/${inviteId}/revoke`, { method: 'POST' });
+export const getAdminInvites = async () => unwrapList(await request('/admin/invites'));
+export const createUserInvite = async (payload) => request('/admin/invites', { method: 'POST', body: JSON.stringify(payload) });
+export const resendUserInvite = async (inviteId) => request(`/admin/invites/${inviteId}/resend`, { method: 'POST' });
+export const revokeUserInvite = async (inviteId) => request(`/admin/invites/${inviteId}/revoke`, { method: 'POST' });
 
-export { API_BASE };
+export const getTechnicianInvites = getAdminInvites;
+export const createTechnicianInvite = async (payload) => createUserInvite({ ...payload, role: 'TECHNICIAN' });
+export const resendTechnicianInvite = resendUserInvite;
+export const revokeTechnicianInvite = revokeUserInvite;
 
+export { BACKEND_BASE_URL as API_BASE };

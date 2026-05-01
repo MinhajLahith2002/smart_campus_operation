@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { Button, Card, Input, Badge } from '../ui/Primitives';
+import { Button, Card, Input, Badge, NoticeBanner } from '../ui/Primitives';
 import { RESOURCE_DAYS, RESOURCE_STATUSES, RESOURCE_TYPES } from '../../lib/moduleAApi';
 import { cn } from '../../lib/utils';
 
@@ -115,6 +115,14 @@ export const ResourceFormModal = ({
             </Button>
           </div>
 
+          <div className="px-6 pt-6 md:px-8">
+            {error && (
+              <NoticeBanner variant="error">
+                {error}
+              </NoticeBanner>
+            )}
+          </div>
+
           <div className="grid gap-8 px-6 py-6 md:px-8 lg:grid-cols-[1fr_0.95fr]">
             <div className="space-y-5">
               <label className="space-y-2 text-sm font-semibold">
@@ -216,8 +224,6 @@ export const ResourceFormModal = ({
                   />
                 </label>
               </Card>
-
-              {error && <div className="rounded-2xl border border-danger/25 bg-danger/5 px-4 py-4 text-sm text-danger">{error}</div>}
             </div>
           </div>
 

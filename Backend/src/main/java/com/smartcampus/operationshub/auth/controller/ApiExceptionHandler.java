@@ -1,4 +1,4 @@
-package com.smartcampus.operationshub.common;
+package com.smartcampus.operationshub.auth.controller;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.time.OffsetDateTime;
@@ -12,7 +12,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = {
+        "com.smartcampus.operationshub.auth",
+        "com.smartcampus.modulec"
+})
 public class ApiExceptionHandler {
 
     @ExceptionHandler(EntityNotFoundException.class)
@@ -20,7 +23,8 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
                 "timestamp", OffsetDateTime.now(),
                 "status", HttpStatus.NOT_FOUND.value(),
-                "message", exception.getMessage()));
+                "message", exception.getMessage()
+        ));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -32,7 +36,8 @@ public class ApiExceptionHandler {
                 "timestamp", OffsetDateTime.now(),
                 "status", HttpStatus.BAD_REQUEST.value(),
                 "message", "Validation failed",
-                "errors", fieldErrors));
+                "errors", fieldErrors
+        ));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -40,7 +45,8 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(Map.of(
                 "timestamp", OffsetDateTime.now(),
                 "status", HttpStatus.BAD_REQUEST.value(),
-                "message", exception.getMessage()));
+                "message", exception.getMessage()
+        ));
     }
 
     @ExceptionHandler(ApiValidationException.class)
@@ -53,12 +59,25 @@ public class ApiExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(ApiRateLimitException.class)
+    public ResponseEntity<?> handleRateLimit(ApiRateLimitException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(exception.getRetryAfterSeconds()))
+                .body(Map.of(
+                        "timestamp", OffsetDateTime.now(),
+                        "status", HttpStatus.TOO_MANY_REQUESTS.value(),
+                        "message", exception.getMessage(),
+                        "details", Map.of("retryAfterSeconds", exception.getRetryAfterSeconds())
+                ));
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<?> handleBadCredentials(BadCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
                 "timestamp", OffsetDateTime.now(),
                 "status", HttpStatus.UNAUTHORIZED.value(),
-                "message", exception.getMessage()));
+                "message", exception.getMessage()
+        ));
     }
 
     @ExceptionHandler(SecurityException.class)
@@ -66,6 +85,7 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
                 "timestamp", OffsetDateTime.now(),
                 "status", HttpStatus.FORBIDDEN.value(),
-                "message", exception.getMessage()));
+                "message", exception.getMessage()
+        ));
     }
 }

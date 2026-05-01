@@ -1,4 +1,4 @@
-package com.smartcampus.operationshub.config;
+package com.smartcampus.operationshub.auth.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -11,8 +11,10 @@ public class AuthProperties {
     private long resetTokenHours = 2;
     private long verificationTokenHours = 24;
     private long inviteTokenHours = 72;
+    private long forgotPasswordCooldownSeconds = 30;
     private final BootstrapAdmin bootstrapAdmin = new BootstrapAdmin();
     private final SampleUsers sampleUsers = new SampleUsers();
+    private final Mail mail = new Mail();
 
     public String getFrontendBaseUrl() {
         return frontendBaseUrl;
@@ -62,12 +64,24 @@ public class AuthProperties {
         this.inviteTokenHours = inviteTokenHours;
     }
 
+    public long getForgotPasswordCooldownSeconds() {
+        return forgotPasswordCooldownSeconds;
+    }
+
+    public void setForgotPasswordCooldownSeconds(long forgotPasswordCooldownSeconds) {
+        this.forgotPasswordCooldownSeconds = forgotPasswordCooldownSeconds;
+    }
+
     public BootstrapAdmin getBootstrapAdmin() {
         return bootstrapAdmin;
     }
 
     public SampleUsers getSampleUsers() {
         return sampleUsers;
+    }
+
+    public Mail getMail() {
+        return mail;
     }
 
     public static class BootstrapAdmin {
@@ -153,7 +167,7 @@ public class AuthProperties {
     }
 
     public static class SampleStudent extends SampleAccount {
-        private String studentId = "IT20240001";
+        private String studentId = "IT24240001";
         private String faculty = "IT";
         private String batch = "2024";
         private String campus = "malabe";
@@ -197,6 +211,27 @@ public class AuthProperties {
 
         public void setPhone(String phone) {
             this.phone = phone;
+        }
+    }
+
+    public static class Mail {
+        private String fromAddress;
+        private String fromName = "CampusHub";
+
+        public String getFromAddress() {
+            return fromAddress;
+        }
+
+        public void setFromAddress(String fromAddress) {
+            this.fromAddress = fromAddress;
+        }
+
+        public String getFromName() {
+            return fromName;
+        }
+
+        public void setFromName(String fromName) {
+            this.fromName = fromName;
         }
     }
 }

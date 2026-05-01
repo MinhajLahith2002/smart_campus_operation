@@ -1,14 +1,19 @@
 package com.smartcampus.operationshub.auth.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,6 +22,7 @@ import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
 import com.smartcampus.operationshub.auth.domain.PasswordResetToken;
+import com.smartcampus.operationshub.auth.domain.TechnicianInvite;
 import com.smartcampus.operationshub.auth.domain.UserRole;
 import com.smartcampus.operationshub.auth.repository.AuthUserRepository;
 import com.smartcampus.operationshub.auth.repository.EmailVerificationTokenRepository;
@@ -25,6 +31,7 @@ import com.smartcampus.operationshub.auth.repository.TechnicianInviteRepository;
 import com.smartcampus.operationshub.auth.security.AuthUserPrincipal;
 import com.smartcampus.operationshub.auth.service.AuthMailService;
 import com.smartcampus.operationshub.auth.service.AuthService;
+import com.smartcampus.operationshub.auth.service.AuthThrottleService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.OffsetDateTime;
@@ -45,7 +52,9 @@ import org.springframework.test.web.servlet.MvcResult;
 
 @SpringBootTest(classes = ModuleCBackendApplication.class, properties = {
         "app.auth.bootstrap-admin.email=admin@campus.edu",
-        "app.auth.bootstrap-admin.password=Admin@123!"
+        "app.auth.bootstrap-admin.password=Admin@123!",
+        "spring.security.oauth2.client.registration.google.client-id=test-client",
+        "spring.security.oauth2.client.registration.google.client-secret=test-secret"
 })
 @AutoConfigureMockMvc
 class AuthControllerIntegrationTest {
@@ -68,20 +77,32 @@ class AuthControllerIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private AuthThrottleService authThrottleService;
+
     @MockBean
     private AuthMailService authMailService;
 
     @BeforeEach
     void setUp() {
+        authThrottleService.clearAll();
         technicianInviteRepository.deleteAll();
         passwordResetTokenRepository.deleteAll();
         emailVerificationTokenRepository.deleteAll();
         authUserRepository.findAll().stream()
                 .filter(user -> !"admin@campus.edu".equalsIgnoreCase(user.getEmail()))
                 .forEach(authUserRepository::delete);
+        authUserRepository.findByEmail("admin@campus.edu").ifPresent(admin -> {
+            admin.setPasswordHash(passwordEncoder.encode("Admin@123!"));
+            admin.setRole(UserRole.ADMIN);
+            admin.setStatus(AccountStatus.ACTIVE);
+            admin.setAuthProviderType(AuthProviderType.LOCAL);
+            admin.setEmailVerified(true);
+            authUserRepository.save(admin);
+        });
         doNothing().when(authMailService).sendVerificationEmail(any(), any());
         doNothing().when(authMailService).sendPasswordResetEmail(any(), any());
-        doNothing().when(authMailService).sendTechnicianInviteEmail(any(), any());
+        doNothing().when(authMailService).sendUserInviteEmail(any(), any());
     }
 
     @Test
@@ -107,6 +128,24 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void authEndpointsExposeCorsHeadersForFrontendOrigin() throws Exception {
+        mockMvc.perform(get("/api/auth/config")
+                        .header("Origin", "http://localhost:3000"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+
+        mockMvc.perform(options("/api/auth/login")
+                        .header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"))
+                .andExpect(header().string("Access-Control-Allow-Methods", containsString("POST")));
+    }
+
+    @Test
     void studentCompleteLocalRegistrationVerificationResetAndLoginFlowWorks() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -116,7 +155,7 @@ class AuthControllerIntegrationTest {
                                   "email":"StudentFlow@Campus.edu",
                                   "password":"Password@123",
                                   "confirmPassword":"Password@123",
-                                  "studentId":" it20240002 ",
+                                  "studentId":" it24830002 ",
                                   "faculty":" information technology ",
                                   "batch":"2024",
                                   "campus":" Malabe ",
@@ -233,7 +272,7 @@ class AuthControllerIntegrationTest {
                         .content("""
                                 {
                                   "fullName":"Google Student",
-                                  "studentId":"IT20240003",
+                                  "studentId":"IT24830003",
                                   "faculty":"IT",
                                   "batch":"2024",
                                   "campus":"malabe",
@@ -288,7 +327,7 @@ class AuthControllerIntegrationTest {
     @Test
     void duplicateStudentIdIsRejectedWithFieldError() throws Exception {
         AuthUser existing = saveUser("student-2", "existing@campus.edu", UserRole.STUDENT, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
-        existing.setStudentId("IT20240001");
+        existing.setStudentId("IT24830001");
         authUserRepository.save(existing);
 
         mockMvc.perform(post("/api/auth/register")
@@ -299,7 +338,7 @@ class AuthControllerIntegrationTest {
                                   "email":"new@campus.edu",
                                   "password":"Password@123",
                                   "confirmPassword":"Password@123",
-                                  "studentId":"IT20240001",
+                                  "studentId":"IT24830001",
                                   "faculty":"IT",
                                   "batch":"2024",
                                   "campus":"malabe",
@@ -320,6 +359,26 @@ class AuthControllerIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message", is("If an account exists for that email, a password reset link has been sent.")));
+    }
+
+    @Test
+    void forgotPasswordIsRateLimitedForRepeatedRequests() throws Exception {
+        saveUser("student-rate", "ratelimit@campus.edu", UserRole.STUDENT, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"ratelimit@campus.edu"}
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"ratelimit@campus.edu"}
+                                """))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.details.retryAfterSeconds").exists());
     }
 
     @Test
@@ -360,7 +419,8 @@ class AuthControllerIntegrationTest {
                         .content("""
                                 {
                                   "fullName":"Campus Technician",
-                                  "email":"technician.flow@campus.edu"
+                                  "email":"technician.flow@campus.edu",
+                                  "role":"TECHNICIAN"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -373,12 +433,13 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$[?(@.email=='technician.flow@campus.edu' && @.status=='PENDING')]").exists());
 
         ArgumentCaptor<String> inviteLinkCaptor = ArgumentCaptor.forClass(String.class);
-        verify(authMailService).sendTechnicianInviteEmail(any(), inviteLinkCaptor.capture());
+        verify(authMailService).sendUserInviteEmail(any(), inviteLinkCaptor.capture());
         String rawToken = extractToken(inviteLinkCaptor.getValue());
 
         mockMvc.perform(get("/api/auth/invitations/{token}", rawToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email", is("technician.flow@campus.edu")))
+                .andExpect(jsonPath("$.role", is("TECHNICIAN")))
                 .andExpect(jsonPath("$.status", is("PENDING")));
 
         MvcResult acceptanceResult = mockMvc.perform(post("/api/auth/invitations/accept")
@@ -418,6 +479,66 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void invitedAdminCompleteSetupCanAccessAdminUserManagement() throws Exception {
+        MockHttpSession seededAdminSession = loginAndGetSession("admin@campus.edu", "Admin@123!");
+
+        mockMvc.perform(post("/api/auth/admin/invites")
+                        .session(seededAdminSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName":"Operations Admin Two",
+                                  "email":"admin.two@campus.edu",
+                                  "role":"ADMIN"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("admin.two@campus.edu")))
+                .andExpect(jsonPath("$.role", is("ADMIN")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        ArgumentCaptor<String> adminInviteLinkCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authMailService).sendUserInviteEmail(any(), adminInviteLinkCaptor.capture());
+        String rawToken = extractToken(adminInviteLinkCaptor.getValue());
+
+        mockMvc.perform(get("/api/auth/invitations/{token}", rawToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("admin.two@campus.edu")))
+                .andExpect(jsonPath("$.role", is("ADMIN")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        MvcResult invitedAdminAcceptance = mockMvc.perform(post("/api/auth/invitations/accept")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token":"%s",
+                                  "password":"AdminTwo@123",
+                                  "confirmPassword":"AdminTwo@123"
+                                }
+                                """.formatted(rawToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.email", is("admin.two@campus.edu")))
+                .andExpect(jsonPath("$.user.role", is("ADMIN")))
+                .andExpect(jsonPath("$.user.status", is("ACTIVE")))
+                .andReturn();
+
+        MockHttpSession invitedAdminSession = (MockHttpSession) invitedAdminAcceptance.getRequest().getSession(false);
+
+        mockMvc.perform(get("/api/auth/admin/users")
+                        .session(invitedAdminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.email=='admin@campus.edu' && @.role=='ADMIN')]").exists());
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin.two@campus.edu","password":"AdminTwo@123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role", is("ADMIN")));
+    }
+
+    @Test
     void seededAdminCompleteLoginAndUserManagementFlowWorks() throws Exception {
         AuthUser student = saveUser("student-5", "managed@campus.edu", UserRole.STUDENT, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
 
@@ -452,6 +573,162 @@ class AuthControllerIntegrationTest {
                                 """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message", is("This account is currently disabled.")));
+    }
+
+    @Test
+    void adminCanResendPendingInviteAndPersistFreshTokenExpiry() throws Exception {
+        MockHttpSession adminSession = loginAndGetSession("admin@campus.edu", "Admin@123!");
+
+        mockMvc.perform(post("/api/auth/admin/invites")
+                        .session(adminSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName":"Resend Target",
+                                  "email":"resend.target@campus.edu",
+                                  "role":"TECHNICIAN"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("resend.target@campus.edu")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        TechnicianInvite createdInvite = technicianInviteRepository.findTopByEmailOrderByCreatedAtDesc("resend.target@campus.edu")
+                .orElseThrow();
+        String originalTokenHash = createdInvite.getTokenHash();
+        OffsetDateTime originalExpiry = createdInvite.getExpiresAt();
+
+        clearInvocations(authMailService);
+
+        mockMvc.perform(post("/api/auth/admin/invites/{inviteId}/resend", createdInvite.getId())
+                        .session(adminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("resend.target@campus.edu")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        TechnicianInvite resentInvite = technicianInviteRepository.findById(createdInvite.getId())
+                .orElseThrow();
+
+        verify(authMailService, times(1)).sendUserInviteEmail(any(), any());
+        org.junit.jupiter.api.Assertions.assertNotEquals(originalTokenHash, resentInvite.getTokenHash());
+        org.junit.jupiter.api.Assertions.assertTrue(resentInvite.getExpiresAt().isAfter(originalExpiry));
+        org.junit.jupiter.api.Assertions.assertNull(resentInvite.getRevokedAt());
+        org.junit.jupiter.api.Assertions.assertNull(resentInvite.getAcceptedAt());
+    }
+
+    @Test
+    void adminCanRevokePendingInviteAndDisableInvitedAccount() throws Exception {
+        MockHttpSession adminSession = loginAndGetSession("admin@campus.edu", "Admin@123!");
+
+        mockMvc.perform(post("/api/auth/admin/invites")
+                        .session(adminSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName":"Revoke Target",
+                                  "email":"revoke.target@campus.edu",
+                                  "role":"ADMIN"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("revoke.target@campus.edu")))
+                .andExpect(jsonPath("$.status", is("PENDING")));
+
+        TechnicianInvite createdInvite = technicianInviteRepository.findTopByEmailOrderByCreatedAtDesc("revoke.target@campus.edu")
+                .orElseThrow();
+
+        mockMvc.perform(post("/api/auth/admin/invites/{inviteId}/revoke", createdInvite.getId())
+                        .session(adminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("revoke.target@campus.edu")))
+                .andExpect(jsonPath("$.status", is("REVOKED")));
+
+        TechnicianInvite revokedInvite = technicianInviteRepository.findById(createdInvite.getId())
+                .orElseThrow();
+        AuthUser revokedUser = authUserRepository.findByEmail("revoke.target@campus.edu")
+                .orElseThrow();
+
+        org.junit.jupiter.api.Assertions.assertNotNull(revokedInvite.getRevokedAt());
+        org.junit.jupiter.api.Assertions.assertEquals(AccountStatus.DISABLED, revokedUser.getStatus());
+
+        mockMvc.perform(get("/api/auth/admin/invites")
+                        .session(adminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.email=='revoke.target@campus.edu' && @.status=='REVOKED')]").exists());
+    }
+
+    @Test
+    void adminCanUseForgotPasswordAndLoginWithUpdatedPassword() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@campus.edu"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("If an account exists for that email, a password reset link has been sent.")));
+
+        ArgumentCaptor<String> resetLinkCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authMailService).sendPasswordResetEmail(any(), resetLinkCaptor.capture());
+        String resetToken = extractToken(resetLinkCaptor.getValue());
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token":"%s",
+                                  "password":"AdminReset@123",
+                                  "confirmPassword":"AdminReset@123"
+                                }
+                                """.formatted(resetToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("Your password has been updated.")));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"admin@campus.edu","password":"AdminReset@123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role", is("ADMIN")))
+                .andExpect(jsonPath("$.user.authProviderType", is("LOCAL")));
+    }
+
+    @Test
+    void activeTechnicianCanUseForgotPasswordAndLoginWithUpdatedPassword() throws Exception {
+        saveUser("tech-reset", "tech.reset@campus.edu", UserRole.TECHNICIAN, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"tech.reset@campus.edu"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("If an account exists for that email, a password reset link has been sent.")));
+
+        ArgumentCaptor<String> resetLinkCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authMailService).sendPasswordResetEmail(any(), resetLinkCaptor.capture());
+        String resetToken = extractToken(resetLinkCaptor.getValue());
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token":"%s",
+                                  "password":"TechReset@123",
+                                  "confirmPassword":"TechReset@123"
+                                }
+                                """.formatted(resetToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("Your password has been updated.")));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"tech.reset@campus.edu","password":"TechReset@123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.role", is("TECHNICIAN")))
+                .andExpect(jsonPath("$.user.authProviderType", is("LOCAL")));
     }
 
     @Test
