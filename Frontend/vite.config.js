@@ -19,14 +19,22 @@ export default defineConfig(({mode}) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined;
-            if (id.includes('react-dom') || id.includes(`${path.sep}react${path.sep}`)) return 'react-vendor';
-            if (id.includes('lucide-react') || id.includes(`${path.sep}motion${path.sep}`)) return 'ui-vendor';
+            const normalizedId = id.replaceAll('\\', '/');
+            if (
+              normalizedId.includes('/node_modules/react/')
+              || normalizedId.includes('/node_modules/react-dom/')
+              || normalizedId.includes('/node_modules/scheduler/')
+            ) {
+              return 'react-vendor';
+            }
+            if (normalizedId.includes('/node_modules/lucide-react/') || normalizedId.includes('/node_modules/motion/')) return 'ui-vendor';
             return 'vendor';
           },
         },
       },
     },
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
