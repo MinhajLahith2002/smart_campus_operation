@@ -16,7 +16,7 @@ const getEffectiveTechnicianStatus = (ticket) => {
 
 export const TechnicianTicketsPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshSession } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -42,6 +42,15 @@ export const TechnicianTicketsPage = () => {
     if (user) loadTickets();
   }, [user]);
 
+  useEffect(() => {
+    const onRefreshTickets = () => {
+      if (user) loadTickets();
+    };
+
+    window.addEventListener('tickets:refresh', onRefreshTickets);
+    return () => window.removeEventListener('tickets:refresh', onRefreshTickets);
+  }, [user]);
+
   const orderedTickets = useMemo(() => [...tickets].sort((a, b) => {
     const rank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
     return (rank[a.priority] ?? 99) - (rank[b.priority] ?? 99);
@@ -54,7 +63,20 @@ export const TechnicianTicketsPage = () => {
       await callback();
       await loadTickets();
     } catch (err) {
-      setActionError(err.message || 'Unable to update this ticket.');
+      const mismatchMessage = 'Admins can only reject tickets. Assignment is the admin workflow action for active cases.';
+      if ((err?.message || '') === mismatchMessage) {
+        try {
+          await refreshSession();
+          await callback();
+          await loadTickets();
+          return;
+        } catch (_) {
+          // Fall through to user-facing guidance below.
+        }
+        setActionError('Session role mismatch detected. Please sign out and sign in again as the assigned technician, then retry.');
+      } else {
+        setActionError(err.message || 'Unable to update this ticket.');
+      }
     } finally {
       setBusyAction('');
     }

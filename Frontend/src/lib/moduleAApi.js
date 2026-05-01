@@ -1,13 +1,7 @@
 import { toBackendRole } from './moduleCApi';
 import { BACKEND_BASE_URL, normalizeBaseUrl } from './backendConfig';
 
-<<<<<<< HEAD
-const BACKEND_BASE = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8081';
-
-export const MODULE_A_API_BASE = import.meta.env.VITE_MODULE_A_API_URL || `${BACKEND_BASE}/api/module-a/resources`;
-=======
 export const MODULE_A_API_BASE = normalizeBaseUrl(import.meta.env.VITE_MODULE_A_API_URL) || `${BACKEND_BASE_URL}/api/module-a/resources`;
->>>>>>> origin/main
 export const RESOURCE_TYPES = ['LAB', 'HALL', 'MEETING_ROOM', 'EQUIPMENT'];
 export const RESOURCE_STATUSES = ['ACTIVE', 'OUT_OF_SERVICE'];
 export const RESOURCE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];

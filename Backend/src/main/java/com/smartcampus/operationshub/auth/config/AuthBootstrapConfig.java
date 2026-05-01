@@ -1,6 +1,7 @@
 package com.smartcampus.operationshub.auth.config;
 
 import com.smartcampus.operationshub.auth.repository.AuthUserRepository;
+import com.smartcampus.operationshub.config.AuthBootstrapSupport;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

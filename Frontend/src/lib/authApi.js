@@ -60,6 +60,12 @@ const request = async (path, options = {}) => {
   }
 };
 
+const unwrapList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.value)) return payload.value;
+  return [];
+};
+
 export const getAuthConfig = async () => request('/config');
 export const getCurrentUser = async () => request('/me');
 export const loginWithEmail = async (payload) => request('/login', { method: 'POST', body: JSON.stringify(payload) });
@@ -80,7 +86,7 @@ export const getAdminUsers = async ({ query = '', role = '', status = '', provid
   if (status) search.set('status', status);
   if (provider) search.set('provider', provider);
   const suffix = search.toString() ? `?${search.toString()}` : '';
-  return request(`/admin/users${suffix}`);
+  return unwrapList(await request(`/admin/users${suffix}`));
 };
 
 export const updateAdminUserStatus = async (userId, status) => request(`/admin/users/${userId}/status`, {
@@ -88,7 +94,7 @@ export const updateAdminUserStatus = async (userId, status) => request(`/admin/u
   body: JSON.stringify({ status }),
 });
 
-export const getAdminInvites = async () => request('/admin/invites');
+export const getAdminInvites = async () => unwrapList(await request('/admin/invites'));
 export const createUserInvite = async (payload) => request('/admin/invites', { method: 'POST', body: JSON.stringify(payload) });
 export const resendUserInvite = async (inviteId) => request(`/admin/invites/${inviteId}/resend`, { method: 'POST' });
 export const revokeUserInvite = async (inviteId) => request(`/admin/invites/${inviteId}/revoke`, { method: 'POST' });

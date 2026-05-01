@@ -26,6 +26,7 @@ import com.smartcampus.operationshub.auth.repository.TechnicianInviteRepository;
 import com.smartcampus.operationshub.auth.security.AuthUserPrincipal;
 import com.smartcampus.operationshub.auth.service.AuthMailService;
 import java.time.OffsetDateTime;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,6 +69,9 @@ class TicketDuplicateCheckIntegrationTest {
     @MockBean
     private AuthMailService authMailService;
 
+    @Autowired
+    private EntityManager entityManager;
+
     private AuthUser student;
     private AuthUser admin;
     private AuthUser technicianOne;
@@ -75,13 +79,13 @@ class TicketDuplicateCheckIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        ticketRepository.deleteAll();
+        jdbcTemplate.execute("truncate table ticket_comments, ticket_activities, ticket_evidence, tickets, notification_event restart identity cascade");
+        entityManager.clear();
         technicianInviteRepository.deleteAll();
         passwordResetTokenRepository.deleteAll();
         emailVerificationTokenRepository.deleteAll();
-        authUserRepository.findAll().stream()
-                .filter(user -> !"admin@campus.edu".equalsIgnoreCase(user.getEmail()))
-                .forEach(authUserRepository::delete);
+        authUserRepository.deleteAllInBatch();
+        entityManager.clear();
         student = saveUser("student-duplicate", "student.duplicate@campus.edu", "Duplicate Student", UserRole.STUDENT);
         admin = saveUser("admin-duplicate", "ops.admin@campus.edu", "Ops Admin", UserRole.ADMIN);
         technicianOne = saveUser("tech-one", "tech.one@campus.edu", "Kasun Silva", UserRole.TECHNICIAN);

@@ -31,7 +31,7 @@ import { getDemoUsers } from '../lib/operationsApi';
 export const TicketDetailPage = () => {
   const navigate = useNavigate();
   const { ticketId } = useParams();
-  const { user } = useAuth();
+  const { user, refreshSession } = useAuth();
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,10 +59,19 @@ export const TicketDetailPage = () => {
   };
 
   useEffect(() => { if (user) loadTicket(); }, [ticketId, user]);
+  useEffect(() => { setActionError(''); }, [ticket?.id, ticket?.status]);
 
-  const isReporter = ticket && user?.id === ticket.reporterId;
+  const isReporter = Boolean(ticket) && (
+    user?.id === ticket.reporterId
+    || (
+      typeof user?.email === 'string'
+      && typeof ticket?.reporterEmail === 'string'
+      && user.email.trim().toLowerCase() === ticket.reporterEmail.trim().toLowerCase()
+    )
+  );
   const isAdmin = user?.role === 'ADMIN';
   const isTechnician = user?.role === 'TECHNICIAN' && user?.id === ticket?.assignedTechnicianId;
+  const canResolveConfirmation = isReporter && ticket?.status === 'RESOLVED';
   const canComment = ticket && ['OPEN', 'IN_PROGRESS', 'RESOLVED'].includes(ticket.status) && (isReporter || isAdmin || isTechnician);
   const canReporterDelete = isReporter && ['CLOSED', 'REJECTED'].includes(ticket?.status);
   const canAdminDelete = isAdmin && ['CLOSED', 'REJECTED'].includes(ticket?.status);
@@ -141,6 +150,17 @@ export const TicketDetailPage = () => {
     }
   };
 
+  const requireFreshUser = async (allowedRoles) => {
+    const latestUser = await refreshSession().catch(() => null);
+    if (!latestUser) {
+      throw new Error('Your session expired. Please sign in again and retry.');
+    }
+    if (allowedRoles && !allowedRoles.includes(latestUser.role)) {
+      throw new Error('Session role mismatch detected. Please sign in again with the correct role and retry.');
+    }
+    return latestUser;
+  };
+
   if (loading) return <Card className="p-8 text-sm text-muted-foreground">Loading case file...</Card>;
 
   if (error || !ticket) {
@@ -171,12 +191,19 @@ export const TicketDetailPage = () => {
     });
   };
 
-  const handleConfirmFixed = () => runAction('close', () => closeTicket(ticket.id, {
-    actorId: user.id,
-    actorName: user.name,
-    actorRole: toBackendRole(user.role),
-    note: 'Reporter confirmed the fix and closed the ticket.',
-  }));
+  const handleConfirmFixed = () => runAction('close', async () => {
+    const latestUser = await requireFreshUser(['USER', 'ADMIN']);
+    await closeTicket(ticket.id, {
+      actorId: latestUser.id,
+      actorName: latestUser.name,
+      actorRole: toBackendRole(latestUser.role),
+      note: 'Reporter confirmed the fix and closed the ticket.',
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('tickets:refresh'));
+    }
+    navigate('/tickets/my');
+  });
 
   const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -218,39 +245,50 @@ export const TicketDetailPage = () => {
     }
 
     runAction('reopen', async () => {
+      const latestUser = await requireFreshUser(['USER', 'ADMIN']);
       await reopenTicket(ticket.id, {
-        actorId: user.id,
-        actorName: user.name,
-        actorRole: toBackendRole(user.role),
+        actorId: latestUser.id,
+        actorName: latestUser.name,
+        actorRole: toBackendRole(latestUser.role),
         note: stillBrokenNote.trim(),
         evidenceLabel: stillBrokenPhoto?.name || '',
         evidenceDataUrl: stillBrokenPhoto?.dataUrl || '',
       });
       setStillBrokenModalOpen(false);
       setStillBrokenPhoto(null);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('tickets:refresh'));
+      }
+      navigate('/tickets/my');
     });
   };
 
-  const handleTechnicianProgress = (status) => runAction(status, () => updateTicketStatus(ticket.id, {
-    status,
-    resolutionNotes: status === 'RESOLVED' ? (window.prompt('Resolution notes', ticket.resolutionNotes || 'Issue resolved after inspection and corrective work.') || '') : ticket.resolutionNotes || '',
-    actorId: user.id,
-    actorName: user.name,
-    actorRole: toBackendRole(user.role),
-    detail: status === 'IN_PROGRESS' ? 'Technician began active work on this ticket.' : 'Technician marked the ticket resolved with a resolution note.',
-  }));
+  const handleTechnicianProgress = (status) => runAction(status, async () => {
+    const latestUser = await requireFreshUser(['TECHNICIAN']);
+    await updateTicketStatus(ticket.id, {
+      status,
+      resolutionNotes: status === 'RESOLVED' ? (window.prompt('Resolution notes', ticket.resolutionNotes || 'Issue resolved after inspection and corrective work.') || '') : ticket.resolutionNotes || '',
+      actorId: latestUser.id,
+      actorName: latestUser.name,
+      actorRole: toBackendRole(latestUser.role),
+      detail: status === 'IN_PROGRESS' ? 'Technician began active work on this ticket.' : 'Technician marked the ticket resolved with a resolution note.',
+    });
+  });
 
   const handleAdminReject = () => {
     const detailNote = window.prompt('Rejection reason', ticket.rejectionReason || 'Admin rejected the ticket during desk triage.');
     if (!detailNote) return;
-    runAction('reject', () => updateTicketStatus(ticket.id, {
-      status: 'REJECTED',
-      resolutionNotes: '',
-      actorId: user.id,
-      actorName: user.name,
-      actorRole: toBackendRole(user.role),
-      detail: detailNote,
-    }));
+    runAction('reject', async () => {
+      const latestUser = await requireFreshUser(['ADMIN']);
+      await updateTicketStatus(ticket.id, {
+        status: 'REJECTED',
+        resolutionNotes: '',
+        actorId: latestUser.id,
+        actorName: latestUser.name,
+        actorRole: toBackendRole(latestUser.role),
+        detail: detailNote,
+      });
+    });
   };
 
   const handleAdminAssign = () => {
@@ -258,13 +296,16 @@ export const TicketDetailPage = () => {
     if (!technicianId) return;
     const technicianName = window.prompt('Technician name', ticket.assignedTechnicianName || 'Kasun Silva');
     if (!technicianName) return;
-    runAction('assign', () => assignTechnician(ticket.id, {
-      technicianId,
-      technicianName,
-      actorId: user.id,
-      actorName: user.name,
-      actorRole: toBackendRole(user.role),
-    }));
+    runAction('assign', async () => {
+      const latestUser = await requireFreshUser(['ADMIN']);
+      await assignTechnician(ticket.id, {
+        technicianId,
+        technicianName,
+        actorId: latestUser.id,
+        actorName: latestUser.name,
+        actorRole: toBackendRole(latestUser.role),
+      });
+    });
   };
 
   const submitComment = async () => {
@@ -449,11 +490,7 @@ export const TicketDetailPage = () => {
                 <div key={activity.id} className="rounded-2xl border border-border bg-muted/55 px-4 py-4 dark:bg-white/5">
                   <p className="font-semibold text-foreground">{activity.action.replace('_', ' ')}</p>
                   <p className="mt-1">{activity.detail}</p>
-<<<<<<< HEAD
-                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} � {activity.actorRole}</p>
-=======
-                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} · {activity.actorRole}</p>
->>>>>>> origin/main
+                  <p className="mt-2 text-xs uppercase tracking-[0.24em]">{activity.actorName} - {activity.actorRole}</p>
                 </div>
               ))}
             </div>
@@ -493,11 +530,7 @@ export const TicketDetailPage = () => {
                       <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${badgeClass}`}>{index + 1}</div>
                       <div>
                         <p className="text-sm font-semibold">{step.title}</p>
-<<<<<<< HEAD
-                        <p className="text-xs text-muted-foreground">{step.owner} � {statusCopy}</p>
-=======
-                        <p className="text-xs text-muted-foreground">{step.owner} · {statusCopy}</p>
->>>>>>> origin/main
+                        <p className="text-xs text-muted-foreground">{step.owner} - {statusCopy}</p>
                       </div>
                     </div>
                   </div>
@@ -517,7 +550,7 @@ export const TicketDetailPage = () => {
               {(canReporterDelete || canAdminDelete) && (
                 <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'delete-ticket'} onClick={handleDeleteTicket}>Delete Ticket</Button>
               )}
-              {isReporter && ticket.status === 'RESOLVED' && (
+              {canResolveConfirmation && (
                 <>
                   <Button className="w-full gap-2" isLoading={busyAction === 'close'} onClick={handleConfirmFixed}>Confirm Fixed</Button>
                   <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'reopen'} onClick={openStillBrokenModal}>Report Still Broken</Button>
@@ -542,7 +575,7 @@ export const TicketDetailPage = () => {
                   {ticket.status === 'IN_PROGRESS' && <Button variant="outline" className="w-full gap-2" isLoading={busyAction === 'RESOLVED'} onClick={() => handleTechnicianProgress('RESOLVED')}>Mark Resolved</Button>}
                 </>
               )}
-              {!isReporter && !isAdmin && !isTechnician && <p className="text-sm text-muted-foreground">This case is visible, but no workflow actions are available for your current role.</p>}
+              {!isReporter && !isAdmin && !isTechnician && !canResolveConfirmation && <p className="text-sm text-muted-foreground">This case is visible, but no workflow actions are available for your current role.</p>}
             </div>
           </Card>
         </div>
@@ -637,10 +670,4 @@ const InlineRow = ({ icon, label, value }) => (
     <span className="text-sm font-semibold text-white">{value}</span>
   </div>
 );
-
-
-
-
-
-
 

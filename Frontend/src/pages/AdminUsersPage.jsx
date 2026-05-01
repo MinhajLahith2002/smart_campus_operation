@@ -9,6 +9,7 @@ import {
   revokeUserInvite,
   updateAdminUserStatus,
 } from '../lib/authApi';
+import { useAuth } from '../context/AuthContext';
 import { validateAdminUserSearch, validateUserInvite } from '../lib/authValidation';
 
 const ROLE_OPTIONS = ['', 'STUDENT', 'ADMIN', 'TECHNICIAN'];
@@ -34,6 +35,7 @@ const inviteHistoryActionClassNames = {
 };
 
 export const AdminUsersPage = () => {
+  const { user, isLoading: isAuthLoading, refreshSession } = useAuth();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [users, setUsers] = useState([]);
   const [invites, setInvites] = useState([]);
@@ -123,21 +125,48 @@ export const AdminUsersPage = () => {
   }, [filters, searchError]);
 
   useEffect(() => {
+    let ignore = false;
+
     const bootstrap = async () => {
+      let canBootstrap = false;
+      if (isAuthLoading) {
+        return;
+      }
+
       setLoading(true);
       try {
+        const activeUser = user ?? await refreshSession().catch(() => null);
+        if (ignore) {
+          return;
+        }
+
+        if (!activeUser || activeUser.role !== 'ADMIN') {
+          setUsers([]);
+          setInvites([]);
+          setError('Unauthorized');
+          hasBootstrappedRef.current = false;
+          return;
+        }
+
+        canBootstrap = true;
         await Promise.all([
           loadUsers(filters, { showLoadingState: false }),
           loadInvites(),
         ]);
       } finally {
-        hasBootstrappedRef.current = true;
-        setLoading(false);
+        if (!ignore) {
+          hasBootstrappedRef.current = canBootstrap;
+          setLoading(false);
+        }
       }
     };
 
     bootstrap();
-  }, []);
+
+    return () => {
+      ignore = true;
+    };
+  }, [isAuthLoading, refreshSession, user]);
 
   const handleFilterSubmit = async (event) => {
     event.preventDefault();
@@ -714,4 +743,3 @@ const InviteChecklistItem = ({ valid, label, neutral = false }) => {
     </div>
   );
 };
-

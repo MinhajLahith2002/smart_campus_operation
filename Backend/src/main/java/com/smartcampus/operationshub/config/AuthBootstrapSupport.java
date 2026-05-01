@@ -1,5 +1,6 @@
 package com.smartcampus.operationshub.config;
 
+import com.smartcampus.operationshub.auth.config.AuthProperties;
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;

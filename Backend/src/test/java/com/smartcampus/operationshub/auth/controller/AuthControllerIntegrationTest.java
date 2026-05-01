@@ -107,15 +107,15 @@ class AuthControllerIntegrationTest {
 
     @Test
     void localEmailLoginSucceedsAndAllowsProtectedAccess() throws Exception {
-        AuthUser student = saveUser("student-1", "student@campus.edu", UserRole.STUDENT, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
+        AuthUser student = saveUser("student-1", "student-login@campus.edu", UserRole.STUDENT, AccountStatus.ACTIVE, AuthProviderType.LOCAL);
 
         MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"email":"student@campus.edu","password":"Password@123"}
+                                {"email":"student-login@campus.edu","password":"Password@123"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.user.email", is("student@campus.edu")))
+                .andExpect(jsonPath("$.user.email", is("student-login@campus.edu")))
                 .andReturn();
 
         MockHttpSession session = (MockHttpSession) loginResult.getRequest().getSession(false);

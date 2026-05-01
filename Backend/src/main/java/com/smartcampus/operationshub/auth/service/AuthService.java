@@ -1,13 +1,8 @@
 package com.smartcampus.operationshub.auth.service;
 
-<<<<<<< HEAD
-import com.smartcampus.operationshub.config.AuthProperties;
 import com.smartcampus.operationshub.config.AuthBootstrapSupport;
-import com.smartcampus.operationshub.common.ApiValidationException;
-=======
 import com.smartcampus.operationshub.auth.controller.ApiValidationException;
 import com.smartcampus.operationshub.auth.config.AuthProperties;
->>>>>>> origin/main
 import com.smartcampus.operationshub.auth.domain.AccountStatus;
 import com.smartcampus.operationshub.auth.domain.AuthProviderType;
 import com.smartcampus.operationshub.auth.domain.AuthUser;
